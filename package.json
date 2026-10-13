@@ -1,0 +1,62 @@
+{
+  "name": "shop-qr-payment",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "verify": "npm run test && npm run test:integration && npm run lint && npm run arch:check && npm run build",
+    "dev": "next dev",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "node ./node_modules/eslint/bin/eslint.js .",
+    "arch:check": "depcruise src --config .dependency-cruiser.cjs",
+    "test": "node --experimental-strip-types --import ./tests/register-alias.mjs --test tests/*.test.ts",
+    "test:integration": "node --experimental-strip-types --import ./tests/register-alias.mjs --test tests/integration/*.test.ts",
+    "seed": "node --experimental-strip-types prisma/seed.ts",
+    "docs:uml": "node scripts/generate-uml.js",
+    "db:backup": "node scripts/db-backup.js",
+    "db:restore": "node scripts/db-restore.js",
+    "db:backfill-inventory": "node --experimental-strip-types --import ./tests/register-alias.mjs --env-file=.env scripts/backfill-legacy-inventory.ts",
+    "ghn:import": "node scripts/fetch-ghn-locations.js",
+    "schema:budget": "node scripts/check-prisma-model-budget.mjs",
+    "eval:assistant": "node --experimental-strip-types --import ./tests/register-alias.mjs scripts/eval-assistant.ts",
+    "eval:assistant:online": "node --experimental-strip-types --import ./tests/register-alias.mjs scripts/eval-assistant.ts --online",
+    "eval:commerce": "node --experimental-strip-types --import ./tests/register-alias.mjs scripts/eval-commerce-intelligence.ts",
+    "eval:commerce:online": "node --experimental-strip-types --import ./tests/register-alias.mjs scripts/eval-commerce-intelligence.ts --online",
+    "seed:demo": "node --experimental-strip-types --env-file=.env prisma/seed-demo-data.ts",
+    "seed:demo:electronics": "node --experimental-strip-types --env-file=.env prisma/seed-electronics-demo.ts",
+    "seed:electronics": "node --experimental-strip-types --env-file=.env prisma/seed-electronics-catalog.ts"
+  },
+  "prisma": {
+    "seed": "node --experimental-strip-types prisma/seed.ts"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.2.2",
+    "@prisma/client": "^6.4.1",
+    "@react-email/components": "^1.0.12",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.41.0",
+    "next": "16.3.4",
+    "next-auth": "^4.24.15",
+    "prisma": "^6.4.1",
+    "pusher": "^5.3.4",
+    "pusher-js": "^8.6.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "resend": "^6.26.0",
+    "server-only": "^0.0.1",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.6.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dependency-cruiser": "^18.4.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

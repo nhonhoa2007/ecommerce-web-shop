@@ -1,0 +1,73 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+.idea/
+/public/uploads/*
+!/public/uploads/.gitkeep
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# database backups
+/prisma/backups/*.sql
+!/prisma/backups/.gitkeep
+
+
+# IDE tools
+.zcode/
+.zcodeignore
+.mcp.json
+.claude/
+
+# Tài liệu cá nhân & file tạm ngoài thư mục repo
+.~lock.*#
+*.tmp
+*.dtmp
+.$*
+page_out-*.jpg
+de_cuong_do_an_*
+improve.md
+res.md
+plan-30d.md
+
+# Artifact của công cụ workflow (superpowers SDD)
+.superpowers/
+docs/superpowers/*
+!docs/superpowers/specs/
+!docs/superpowers/plans/
