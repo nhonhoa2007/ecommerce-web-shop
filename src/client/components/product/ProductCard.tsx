@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import Link from 'next/link';
 import { Star } from 'lucide-react';
 import { formatVND } from '@shared/utils';
 import { isSupportedProductImageSource } from '@shared/utils/storefront';
@@ -10,6 +11,7 @@ export function ProductCard({ product }: { product: Product }) {
   const imageSource = isSupportedProductImageSource(product.image) ? product.image : null;
 
   return (
+    <Link href={`/products/${product.id}`} className="block h-full" aria-label={`Xem ${product.name}`}>
     <article className="flex h-full flex-col overflow-hidden rounded-[28px] bg-white p-2.5 shadow-card transition hover:shadow-card-hover">
       <div className="relative aspect-square overflow-hidden rounded-[20px] bg-canvas-mist">
         {imageSource ? (
@@ -60,5 +62,6 @@ export function ProductCard({ product }: { product: Product }) {
         </div>
       </div>
     </article>
+    </Link>
   );
 }
