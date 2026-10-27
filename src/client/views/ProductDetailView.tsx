@@ -1,14 +1,38 @@
+'use client';
+
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, Check, PackageOpen, Star } from 'lucide-react';
 import type { Product } from '@shared/types';
 import { formatVND } from '@shared/utils';
 import { isSupportedProductImageSource } from '@shared/utils/storefront';
+import { useCartStore } from '@client/stores/cart-store';
 
 export function ProductDetailView({ product }: { product: Product }) {
   const imageSource = isSupportedProductImageSource(product.image) ? product.image : null;
   const activeVariants = product.variants?.filter((variant) => variant.isActive) ?? [];
-  const displayPrice = product.effectivePrice ?? product.price;
+  const [selectedVariantId, setSelectedVariantId] = useState(activeVariants[0]?.id ?? null);
+  const [quantity, setQuantity] = useState(1);
+  const selectedVariant = activeVariants.find((variant) => variant.id === selectedVariantId) ?? null;
+  const displayPrice = selectedVariant?.price ?? product.effectivePrice ?? product.price;
+  const availableStock = selectedVariant?.stock ?? product.stock;
+  const addItem = useCartStore((state) => state.addItem);
+
+  const handleAddToCart = () => {
+    addItem(
+      {
+        productId: product.id,
+        name: product.name,
+        price: Number(displayPrice),
+        image: product.image ?? undefined,
+        stock: availableStock,
+        variantId: selectedVariant?.id ?? null,
+        variantTitle: selectedVariant?.title ?? null,
+      },
+      quantity,
+    );
+  };
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -67,12 +91,24 @@ export function ProductDetailView({ product }: { product: Product }) {
               </h2>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {activeVariants.map((variant) => (
-                  <div key={variant.id} className="rounded-2xl border border-faint-border px-4 py-3">
+                  <button
+                    key={variant.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedVariantId(variant.id);
+                      setQuantity(1);
+                    }}
+                    className={`rounded-2xl border px-4 py-3 text-left transition ${
+                      selectedVariantId === variant.id
+                        ? 'border-ink-black bg-canvas-mist'
+                        : 'border-faint-border hover:border-ink-black/40'
+                    }`}
+                  >
                     <p className="font-medium text-ink-black">{variant.title}</p>
                     <p className="mt-1 text-sm text-muted-gray">
                       {formatVND(variant.price)} · Còn {variant.stock}
                     </p>
-                  </div>
+                  </button>
                 ))}
               </div>
             </section>
@@ -80,7 +116,31 @@ export function ProductDetailView({ product }: { product: Product }) {
 
           <div className="mt-7 flex items-center gap-2 text-sm font-medium">
             <Check className="h-4 w-4" />
-            {product.stock > 0 ? `Còn ${product.stock} sản phẩm` : 'Sản phẩm đã hết hàng'}
+            {availableStock > 0 ? `Còn ${availableStock} sản phẩm` : 'Sản phẩm đã hết hàng'}
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-3">
+            <label className="flex items-center gap-2 rounded-full border border-faint-border px-4 py-2">
+              <span className="text-sm text-muted-gray">Số lượng</span>
+              <input
+                type="number"
+                min={1}
+                max={Math.max(availableStock, 1)}
+                value={quantity}
+                onChange={(event) =>
+                  setQuantity(Math.min(Math.max(1, Math.floor(Number(event.target.value) || 1)), Math.max(availableStock, 1)))
+                }
+                className="w-14 bg-transparent text-center font-medium outline-none"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={handleAddToCart}
+              disabled={availableStock <= 0}
+              className="rounded-full bg-ink-black px-6 py-3 text-sm font-medium text-white transition hover:bg-slate-ink disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Thêm vào giỏ hàng
+            </button>
           </div>
         </div>
       </article>

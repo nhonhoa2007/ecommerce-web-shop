@@ -48,6 +48,7 @@ export interface CartItem {
   price: MoneyVnd | number | bigint;
   image?: string;
   quantity: number;
+  stock?: number;
   variantId?: string | null;
   variantTitle?: string | null;
   attachedToProductId?: string | null;

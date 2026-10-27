@@ -4,7 +4,9 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { signOut, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, LogOut, Menu, Search, User, X } from 'lucide-react';
+import { ArrowRight, LogOut, Menu, Search, ShoppingBag, User, X } from 'lucide-react';
+import { useHydrated } from '@client/hooks/useHydrated';
+import { useCartStore } from '@client/stores/cart-store';
 import { buildStorefrontUrl, normalizeStorefrontSort } from '@shared/utils/storefront';
 
 export function Header() {
@@ -12,6 +14,8 @@ export function Header() {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const hydrated = useHydrated();
+  const cartCount = useCartStore((state) => state.getTotalItems());
 
   const handleSearch = (event: React.FormEvent) => {
     event.preventDefault();
@@ -75,6 +79,18 @@ export function Header() {
           </form>
 
           <div className="ml-auto flex items-center gap-2">
+            <Link
+              href="/cart"
+              className="relative rounded-full p-2.5 text-muted-gray transition hover:bg-canvas-mist hover:text-ink-black"
+              aria-label={`Giỏ hàng có ${hydrated ? cartCount : 0} sản phẩm`}
+            >
+              <ShoppingBag className="h-4 w-4" />
+              {hydrated && cartCount > 0 && (
+                <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-shop-violet px-1 text-center text-[10px] leading-5 text-white">
+                  {cartCount}
+                </span>
+              )}
+            </Link>
             {session ? (
               <>
                 <span className="hidden items-center gap-1.5 rounded-full bg-canvas-mist px-3 py-1.5 text-sm text-ink-black sm:flex">
