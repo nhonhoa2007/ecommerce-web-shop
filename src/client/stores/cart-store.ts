@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { CartItem } from '@shared/types';
+import { normalizeCartQuantity } from '@shared/utils/cart';
 
 export type CartLine = Omit<CartItem, 'price'> & { price: number; stock: number };
 type NewCartLine = Omit<CartLine, 'quantity'>;
@@ -27,20 +28,13 @@ function lineMatches(line: CartLine, productId: string, variantId?: string | nul
   return line.productId === productId && (line.variantId ?? null) === (variantId ?? null);
 }
 
-function normalizePositiveQuantity(quantity: number, stock: number) {
-  const normalizedStock = Math.max(0, Math.floor(stock));
-  if (normalizedStock === 0) return 0;
-  const normalizedQuantity = Number.isFinite(quantity) ? Math.max(1, Math.floor(quantity)) : 1;
-  return Math.min(normalizedQuantity, normalizedStock);
-}
-
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
       items: [],
       addItem: (item, quantity = 1) =>
         set((state) => {
-          const addQuantity = normalizePositiveQuantity(quantity, item.stock);
+          const addQuantity = normalizeCartQuantity(quantity, item.stock);
           if (addQuantity === 0) return state;
           const existing = state.items.find((line) =>
             lineMatches(line, item.productId, item.variantId),
@@ -54,7 +48,7 @@ export const useCartStore = create<CartStore>()(
                 ? {
                     ...line,
                     stock: item.stock,
-                    quantity: normalizePositiveQuantity(line.quantity + addQuantity, item.stock),
+                    quantity: normalizeCartQuantity(line.quantity + addQuantity, item.stock),
                   }
                 : line,
             ),
@@ -71,7 +65,7 @@ export const useCartStore = create<CartStore>()(
               ? state.items.filter((line) => !lineMatches(line, productId, variantId))
               : state.items.map((line) =>
                   lineMatches(line, productId, variantId)
-                    ? { ...line, quantity: normalizePositiveQuantity(quantity, line.stock) }
+                    ? { ...line, quantity: normalizeCartQuantity(quantity, line.stock) }
                     : line,
                 ),
         })),
