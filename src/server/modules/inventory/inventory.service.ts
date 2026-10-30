@@ -14,6 +14,11 @@ export interface StockTransaction {
   };
 }
 
+export interface StockReleaseTransaction {
+  product: { update: (args: object) => Promise<unknown> };
+  productVariant: { update: (args: object) => Promise<unknown> };
+}
+
 export async function reserveOrderStock(
   tx: StockTransaction,
   items: OrderStockItem[],
@@ -30,10 +35,11 @@ export async function reserveOrderStock(
         data: { stock: { decrement: item.quantity } },
       });
       if (result.count !== 1) return item.variantId;
-      await tx.product.update({
-        where: { id: item.productId },
+      const parentResult = await tx.product.updateMany({
+        where: { id: item.productId, isActive: true, stock: { gte: item.quantity } },
         data: { stock: { decrement: item.quantity } },
       });
+      if (parentResult.count !== 1) return item.productId;
       continue;
     }
 
@@ -44,4 +50,22 @@ export async function reserveOrderStock(
     if (result.count !== 1) return item.productId;
   }
   return null;
+}
+
+export async function releaseOrderStock(
+  tx: StockReleaseTransaction,
+  items: OrderStockItem[],
+): Promise<void> {
+  for (const item of items) {
+    if (item.variantId) {
+      await tx.productVariant.update({
+        where: { id: item.variantId },
+        data: { stock: { increment: item.quantity } },
+      });
+    }
+    await tx.product.update({
+      where: { id: item.productId },
+      data: { stock: { increment: item.quantity } },
+    });
+  }
 }

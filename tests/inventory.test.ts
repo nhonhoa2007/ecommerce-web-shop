@@ -37,3 +37,18 @@ test('reports the exact line that could not reserve stock', async () => {
   const failed = await reserveOrderStock(tx, [{ productId: 'p1', variantId: 'v1', quantity: 2 }]);
   assert.equal(failed, 'v1');
 });
+
+test('variant reservation also conditionally decrements active parent inventory', async () => {
+  const tx = {
+    product: {
+      updateMany: async () => ({ count: 0 }),
+      update: async () => {
+        throw new Error('unconditional parent update must not be used');
+      },
+    },
+    productVariant: { updateMany: async () => ({ count: 1 }) },
+  };
+
+  const failed = await reserveOrderStock(tx, [{ productId: 'p1', variantId: 'v1', quantity: 2 }]);
+  assert.equal(failed, 'p1');
+});

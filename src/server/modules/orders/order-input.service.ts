@@ -25,6 +25,7 @@ interface AuthoritativeProduct {
   price: bigint;
   stock: number;
   isActive: boolean;
+  inventoryMode: 'BASE' | 'VARIANT';
   variants: Array<{
     id: string;
     title: string;
@@ -48,6 +49,12 @@ export class OrderInputError extends Error {
     this.name = 'OrderInputError';
     this.status = status;
   }
+}
+
+export function createOrderCode(now = new Date()) {
+  const date = now.toISOString().slice(2, 10).replaceAll('-', '');
+  const entropy = globalThis.crypto.randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase();
+  return `DH${date}${entropy}`;
 }
 
 function normalizeText(value: unknown) {
@@ -113,6 +120,9 @@ export async function loadAuthoritativeOrderItems(
     const variant = requested.variantId
       ? product.variants.find((candidate) => candidate.id === requested.variantId && candidate.isActive)
       : null;
+    if (product.inventoryMode === 'VARIANT' && !requested.variantId) {
+      throw new OrderInputError(`Vui lòng chọn phân loại cho ${product.name}`, 409);
+    }
     if (requested.variantId && !variant) {
       throw new OrderInputError(`Phân loại ${requested.variantId} không còn tồn tại`, 409);
     }

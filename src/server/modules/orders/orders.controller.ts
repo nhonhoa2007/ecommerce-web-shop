@@ -3,8 +3,8 @@ import { NextResponse } from 'next/server';
 import { authOptions } from '@server/modules/auth/auth-options';
 import { prisma } from '@server/database/prisma';
 import { reserveOrderStock, type StockTransaction } from '@server/modules/inventory/inventory.service';
-import { generateOrderCode } from '@shared/utils';
 import {
+  createOrderCode,
   loadAuthoritativeOrderItems,
   OrderInputError,
   type OrderProductRepository,
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
     const input = validateOrderInput(await request.json());
-    const orderCode = generateOrderCode();
+    const orderCode = createOrderCode();
 
     const order = await prisma.$transaction(async (tx) => {
       const authoritative = await loadAuthoritativeOrderItems(

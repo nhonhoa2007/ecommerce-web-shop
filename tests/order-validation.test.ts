@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   OrderInputError,
+  createOrderCode,
   loadAuthoritativeOrderItems,
   validateOrderInput,
 } from '@server/modules/orders/order-input.service';
@@ -53,6 +54,7 @@ test('reloads authoritative prices and rejects missing or insufficient inventory
           price: BigInt(200_000),
           stock: 3,
           isActive: true,
+          inventoryMode: 'BASE',
           variants: [],
         },
       ],
@@ -73,4 +75,35 @@ test('reloads authoritative prices and rejects missing or insufficient inventory
     loadAuthoritativeOrderItems(repository, [{ productId: 'p1', variantId: null, quantity: 4 }]),
     /không đủ tồn kho/i,
   );
+});
+
+test('requires a matching variant for products that use variant inventory', async () => {
+  const repository = {
+    product: {
+      findMany: async () => [
+        {
+          id: 'p1',
+          name: 'Bàn phím',
+          price: BigInt(1_000_000),
+          stock: 5,
+          isActive: true,
+          inventoryMode: 'VARIANT',
+          variants: [
+            { id: 'v1', title: 'Màu đen', price: BigInt(1_100_000), stock: 5, isActive: true },
+          ],
+        },
+      ],
+    },
+  };
+
+  await assert.rejects(
+    loadAuthoritativeOrderItems(repository, [{ productId: 'p1', variantId: null, quantity: 1 }]),
+    /phân loại/i,
+  );
+});
+
+test('creates order codes with enough entropy for a busy day', () => {
+  const codes = new Set(Array.from({ length: 1_000 }, () => createOrderCode()));
+  assert.equal(codes.size, 1_000);
+  assert.ok([...codes].every((code) => /^DH\d{6}[A-F0-9]{12}$/.test(code)));
 });
