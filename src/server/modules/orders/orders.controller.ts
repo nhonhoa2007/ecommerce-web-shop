@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth';
 import { NextResponse } from 'next/server';
 import { authOptions } from '@server/modules/auth/auth-options';
 import { prisma } from '@server/database/prisma';
+import { buildPaymentQrUrl, getBankDetails } from '@server/modules/payment/qr.service';
 import { reserveOrderStock, type StockTransaction } from '@server/modules/inventory/inventory.service';
 import {
   createOrderCode,
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
           shippingFee: BigInt(0),
           discountAmount: BigInt(0),
           totalAmount: authoritative.subtotal,
+          qrContent: buildPaymentQrUrl(getBankDetails(), orderCode, authoritative.subtotal),
           expiresAt: new Date(Date.now() + 15 * 60 * 1000),
           items: {
             create: authoritative.items.map((item) => ({
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(
-      { ...order, totalAmount: order.totalAmount.toString() },
+      { ...order, totalAmount: order.totalAmount.toString(), paymentUrl: `/payment/${order.id}` },
       { status: 201 },
     );
   } catch (error: unknown) {
