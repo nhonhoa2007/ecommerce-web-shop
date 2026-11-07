@@ -8,6 +8,7 @@ import { ArrowRight, LogOut, Menu, Search, ShoppingBag, User, X } from 'lucide-r
 import { useHydrated } from '@client/hooks/useHydrated';
 import { useCartStore } from '@client/stores/cart-store';
 import { buildStorefrontUrl, normalizeStorefrontSort } from '@shared/utils/storefront';
+import { canOpenAdminDashboard } from '@shared/utils/admin-navigation';
 
 export function Header() {
   const { data: session } = useSession();
@@ -16,6 +17,7 @@ export function Header() {
   const [searchQuery, setSearchQuery] = useState('');
   const hydrated = useHydrated();
   const cartCount = useCartStore((state) => state.getTotalItems());
+  const showAdminDashboard = canOpenAdminDashboard(session?.user);
 
   const handleSearch = (event: React.FormEvent) => {
     event.preventDefault();
@@ -79,6 +81,11 @@ export function Header() {
           </form>
 
           <div className="ml-auto flex items-center gap-2">
+            {showAdminDashboard && (
+              <Link href="/admin" className="rounded-full px-3 py-2 text-sm font-medium text-ink-black hover:bg-canvas-mist">
+                Quản trị
+              </Link>
+            )}
             <Link
               href="/cart"
               className="relative rounded-full p-2.5 text-muted-gray transition hover:bg-canvas-mist hover:text-ink-black"
@@ -137,6 +144,7 @@ export function Header() {
             <Link href="/" onClick={() => setMobileMenuOpen(false)} className="block rounded-2xl px-3 py-2.5 text-sm text-ink-black hover:bg-canvas-mist">
               Khám phá sản phẩm
             </Link>
+            {showAdminDashboard && <Link href="/admin" onClick={() => setMobileMenuOpen(false)} className="block rounded-2xl px-3 py-2.5 text-sm text-ink-black hover:bg-canvas-mist">Bảng quản trị</Link>}
           </div>
         )}
       </div>
