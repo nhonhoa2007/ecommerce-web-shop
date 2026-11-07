@@ -4,6 +4,7 @@ import { authOptions } from '@server/modules/auth/auth-options';
 import { prisma } from '@server/database/prisma';
 import { buildPaymentQrUrl, getBankDetails } from '@server/modules/payment/qr.service';
 import { reserveOrderStock, type StockTransaction } from '@server/modules/inventory/inventory.service';
+import { openOrderSupportRoom } from './order-chat.service';
 import {
   createOrderCode,
   loadAuthoritativeOrderItems,
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
         throw new OrderInputError(`Sản phẩm hoặc phân loại ${failedLine} không đủ tồn kho`, 409);
       }
 
-      return tx.order.create({
+      const createdOrder = await tx.order.create({
         data: {
           orderCode,
           userId: session?.user?.id ?? null,
@@ -57,6 +58,8 @@ export async function POST(request: Request) {
         },
         select: { id: true, orderCode: true, totalAmount: true, status: true },
       });
+      await openOrderSupportRoom(tx, createdOrder, session?.user?.id ?? null);
+      return createdOrder;
     });
 
     return NextResponse.json(

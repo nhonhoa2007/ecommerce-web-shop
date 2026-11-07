@@ -7,7 +7,7 @@ test('Admin sees existing sections and Staff needs orders permission', () => {
   assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['orders'] }, '/admin/orders'), true);
   assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['products'] }, '/admin/orders'), false);
   assert.equal(canAccessAdminPage({ role: 'CUSTOMER' }, '/admin'), false);
-  assert.deepEqual(getVisibleAdminSections({ role: 'ADMIN' }).map((item) => item.href), ['/admin', '/admin/orders', '/admin/products', '/admin/customers', '/admin/reviews', '/admin/shipments', '/admin/transactions', '/admin/coupons', '/admin/warranties', '/admin/returns', '/admin/audit-logs']);
+  assert.deepEqual(getVisibleAdminSections({ role: 'ADMIN' }).map((item) => item.href), ['/admin', '/admin/orders', '/admin/products', '/admin/customers', '/admin/reviews', '/admin/shipments', '/admin/transactions', '/admin/coupons', '/admin/chat', '/admin/warranties', '/admin/returns', '/admin/audit-logs']);
 });
 
 test('Products section is visible only to authorized operators', () => {
@@ -52,4 +52,11 @@ test('Transactions are Admin only', () => {
 test('Coupons are Admin only', () => {
   assert.equal(canAccessAdminPage({ role: 'ADMIN' }, '/admin/coupons'), true);
   assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['products'] }, '/admin/coupons'), false);
+});
+
+test('Chat and room detail require chat permission for Staff', () => {
+  const staff = { role: 'STAFF', permissions: ['chat'] };
+  assert.equal(canAccessAdminPage(staff, '/admin/chat'), true);
+  assert.equal(canAccessAdminPage(staff, '/admin/chat/room-1'), true);
+  assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['orders'] }, '/admin/chat/room-1'), false);
 });

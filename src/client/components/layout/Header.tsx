@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { signOut, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, LogOut, Menu, Search, ShoppingBag, User, X } from 'lucide-react';
+import { ArrowRight, LogOut, Menu, MessageCircle, Search, ShoppingBag, User, X } from 'lucide-react';
 import { useHydrated } from '@client/hooks/useHydrated';
 import { useCartStore } from '@client/stores/cart-store';
 import { buildStorefrontUrl, normalizeStorefrontSort } from '@shared/utils/storefront';
@@ -81,6 +81,7 @@ export function Header() {
           </form>
 
           <div className="ml-auto flex items-center gap-2">
+            {session?.user?.role === 'CUSTOMER' && <Link href="/chat" aria-label="Tin nhắn hỗ trợ" className="rounded-full p-2.5 text-muted-gray transition hover:bg-canvas-mist hover:text-ink-black"><MessageCircle className="h-4 w-4" /></Link>}
             {showAdminDashboard && (
               <Link href="/admin" className="rounded-full px-3 py-2 text-sm font-medium text-ink-black hover:bg-canvas-mist">
                 Quản trị
@@ -145,6 +146,7 @@ export function Header() {
               Khám phá sản phẩm
             </Link>
             {showAdminDashboard && <Link href="/admin" onClick={() => setMobileMenuOpen(false)} className="block rounded-2xl px-3 py-2.5 text-sm text-ink-black hover:bg-canvas-mist">Bảng quản trị</Link>}
+            {session?.user?.role === 'CUSTOMER' && <Link href="/chat" onClick={() => setMobileMenuOpen(false)} className="block rounded-2xl px-3 py-2.5 text-sm text-ink-black hover:bg-canvas-mist">Tin nhắn hỗ trợ</Link>}
           </div>
         )}
       </div>

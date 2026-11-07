@@ -17,8 +17,11 @@ export function AdminAppShell({ user, children }: { user: AdminUser; children: R
     <aside className="border-b border-slate-200 bg-white p-5 lg:w-64 lg:shrink-0 lg:border-b-0 lg:border-r">
       <Link href="/admin" className="text-xl font-semibold">shop. <span className="text-sm font-normal text-slate-500">Admin</span></Link>
       <nav aria-label="Điều hướng quản trị" className="mt-6 flex gap-2 lg:flex-col">
-        {getVisibleAdminSections(user).map((item) => <Link key={item.href} href={item.href} aria-current={pathname === item.href ? 'page' : undefined}
-          className={`rounded-xl px-4 py-3 text-sm font-medium ${pathname === item.href ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'}`}>{item.name}</Link>)}
+        {getVisibleAdminSections(user).map((item) => {
+          const active = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(`${item.href}/`));
+          return <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined}
+            className={`rounded-xl px-4 py-3 text-sm font-medium ${active ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'}`}>{item.name}</Link>;
+        })}
       </nav>
       <div className="mt-8 border-t pt-4 text-xs text-slate-500">
         <p className="font-semibold text-slate-800">{user.name || user.email || 'Người dùng'}</p>
