@@ -7,7 +7,7 @@ test('Admin sees existing sections and Staff needs orders permission', () => {
   assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['orders'] }, '/admin/orders'), true);
   assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['products'] }, '/admin/orders'), false);
   assert.equal(canAccessAdminPage({ role: 'CUSTOMER' }, '/admin'), false);
-  assert.deepEqual(getVisibleAdminSections({ role: 'ADMIN' }).map((item) => item.href), ['/admin', '/admin/orders', '/admin/products', '/admin/customers', '/admin/reviews', '/admin/warranties', '/admin/returns', '/admin/audit-logs']);
+  assert.deepEqual(getVisibleAdminSections({ role: 'ADMIN' }).map((item) => item.href), ['/admin', '/admin/orders', '/admin/products', '/admin/customers', '/admin/reviews', '/admin/shipments', '/admin/warranties', '/admin/returns', '/admin/audit-logs']);
 });
 
 test('Products section is visible only to authorized operators', () => {
@@ -36,4 +36,10 @@ test('After-sales pages require warranties permission and audit is Admin only', 
   assert.equal(canAccessAdminPage(staff, '/admin/returns'), true);
   assert.equal(canAccessAdminPage(staff, '/admin/audit-logs'), false);
   assert.equal(canAccessAdminPage({ role: 'ADMIN' }, '/admin/audit-logs'), true);
+});
+
+test('Shipments require shipments permission for Staff', () => {
+  assert.equal(canAccessAdminPage({ role: 'ADMIN' }, '/admin/shipments'), true);
+  assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['shipments'] }, '/admin/shipments'), true);
+  assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['orders'] }, '/admin/shipments'), false);
 });
