@@ -1,0 +1,415 @@
+export type UrgentActionType =
+  | 'TRANSACTION_MISMATCH'
+  | 'LOW_STOCK'
+  | 'NEW_ORDER'
+  | 'SHIPMENT_ISSUE';
+
+export interface UrgentAction {
+  id: string;
+  type: UrgentActionType;
+  title: string;
+  description: string;
+  link: string;
+}
+
+export interface RecentOrderDto {
+  id: string;
+  orderCode: string;
+  customerName: string;
+  customerPhone: string;
+  itemsSummary: string;
+  totalAmount: number;
+  paymentStatus: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface TopProductDto {
+  productId: string;
+  name: string;
+  price: number;
+  image: string | null;
+  category: string | null;
+  totalSold: number;
+}
+
+export interface PaymentMethodDistribution {
+  vietqrPercentage: number;
+  walletPercentage: number;
+  codPercentage: number;
+}
+
+export interface RevenueTrendItem {
+  date: string;
+  label: string;
+  revenue: number;
+  /** Số đơn hàng PAID rơi vào bucket này (phục vụ tooltip biểu đồ) */
+  orders: number;
+}
+
+export interface CustomerTrendItem {
+  label: string;
+  count: number;
+}
+
+export interface AdminAnalyticsSummary {
+  totalRevenue: number;
+  todayRevenue: number;
+  todayRevenueGrowth: number;
+  totalOrders: number;
+  todayOrders: number;
+  periodOrdersCount?: number;
+  pendingOrdersCount: number;
+  processingOrdersCount: number;
+  lowStockCount: number;
+  totalCustomers: number;
+  qrMatchRate: number;
+  unmatchedTransactionsCount: number;
+  activeShipmentsCount: number;
+  totalPaidOrders?: number;
+  periodRevenue?: number;
+  totalTransactions?: number;
+  matchedTransactionsCount?: number;
+  deliveredShipmentsCount?: number;
+  totalShipmentsCount?: number;
+}
+
+export type AnalyticsRange = 'today' | '7days' | 'month';
+
+export interface AdminAnalyticsResponse {
+  summary: AdminAnalyticsSummary;
+  ordersByStatus: Record<string, number>;
+  revenueTrend: RevenueTrendItem[];
+  previousRevenueTrend?: RevenueTrendItem[];
+  /** Số khách hàng mới đăng ký theo 12 tháng gần nhất (bucket tháng hiện tại ở cuối) */
+  newCustomersTrend: CustomerTrendItem[];
+  paymentMethodDistribution: PaymentMethodDistribution;
+  paymentDistributionSampleCount?: number;
+  urgentActions: UrgentAction[];
+  recentOrders: RecentOrderDto[];
+  topProducts: TopProductDto[];
+  range?: AnalyticsRange;
+}
+
+export function getPreviousRevenueStart(currentStart: Date, range: AnalyticsRange): Date {
+  const previousStart = new Date(currentStart);
+  previousStart.setDate(previousStart.getDate() - (range === 'today' ? 1 : range === '7days' ? 7 : 30));
+  return previousStart;
+}
+
+export function buildRevenueComparison(
+  range: AnalyticsRange,
+  currentStart: Date,
+  paidOrders: Array<{ totalAmount: number; createdAt: Date }>
+): { current: RevenueTrendItem[]; previous: RevenueTrendItem[] } {
+  const previousStart = getPreviousRevenueStart(currentStart, range);
+  const currentOrders = paidOrders.filter((order) => order.createdAt >= currentStart);
+  const previousOrders = paidOrders.filter((order) => order.createdAt >= previousStart && order.createdAt < currentStart);
+  return {
+    current: buildRevenueTrend(currentStart, currentOrders, range),
+    previous: buildRevenueTrend(previousStart, previousOrders, range),
+  };
+}
+
+/**
+ * Tính % tăng trưởng doanh thu so với ngày hôm trước
+ */
+export function calculateRevenueGrowth(todayRevenue: number, yesterdayRevenue: number): number {
+  if (yesterdayRevenue > 0) {
+    return Number((((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100).toFixed(1));
+  }
+  if (todayRevenue > 0) {
+    return 100;
+  }
+  return 0;
+}
+
+/**
+ * Tính tỷ lệ % khớp giao dịch tự động VietQR
+ */
+export function calculateQrMatchRate(matchedCount: number, totalCount: number): number {
+  if (totalCount <= 0) {
+    return 100;
+  }
+  const safeMatched = Math.max(0, Math.min(matchedCount, totalCount));
+  return Number(((safeMatched / totalCount) * 100).toFixed(1));
+}
+
+/**
+ * Phân bổ kênh thanh toán cho các đơn hàng đã thanh toán:
+ * VietQR/Casso (transaction ngân hàng), Ví Shop, COD.
+ */
+export function calculatePaymentMethodDistribution(
+  orders: Array<{
+    transaction?: { bankName: string | null } | null;
+    bankTransfers?: Array<{ bankName: string | null }> | null;
+    shipment?: { codAmount: number } | null;
+  }>
+): PaymentMethodDistribution {
+  const total = orders.length;
+  if (total === 0) {
+    return {
+      vietqrPercentage: 0,
+      walletPercentage: 0,
+      codPercentage: 0,
+    };
+  }
+
+  let walletCount = 0;
+  let vietqrCount = 0;
+  let codCount = 0;
+
+  for (const order of orders) {
+    const bankName = order.bankTransfers?.[0]?.bankName ?? order.transaction?.bankName;
+    const hasBankPayment = (order.bankTransfers && order.bankTransfers.length > 0) || Boolean(order.transaction);
+
+    if (bankName === 'SHOP_WALLET') {
+      walletCount++;
+    } else if (order.shipment && order.shipment.codAmount > 0 && !hasBankPayment) {
+      codCount++;
+    } else if (hasBankPayment) {
+      vietqrCount++;
+    } else {
+      codCount++;
+    }
+  }
+
+  return {
+    vietqrPercentage: Number(((vietqrCount / total) * 100).toFixed(1)),
+    walletPercentage: Number(((walletCount / total) * 100).toFixed(1)),
+    codPercentage: Number(((codCount / total) * 100).toFixed(1)),
+  };
+}
+
+/**
+ * Tạo danh sách cảnh báo việc cần xử lý ngay
+ */
+export function buildUrgentActions(params: {
+  unmatchedTransactionsCount: number;
+  criticalStockCount: number;
+  pendingOrdersCount?: number;
+}): UrgentAction[] {
+  const { unmatchedTransactionsCount, criticalStockCount, pendingOrdersCount = 0 } = params;
+  const actions: UrgentAction[] = [];
+
+  if (unmatchedTransactionsCount > 0) {
+    actions.push({
+      id: 'action-unmatched-tx',
+      type: 'TRANSACTION_MISMATCH',
+      title: `${unmatchedTransactionsCount} giao dịch chưa khớp đối soát`,
+      description: `Có ${unmatchedTransactionsCount} giao dịch chuyển khoản ngân hàng chưa được khớp tự động với đơn hàng. Cần kiểm tra đối soát ngay.`,
+      link: '/admin/transactions',
+    });
+  }
+
+  if (criticalStockCount > 0) {
+    actions.push({
+      id: 'action-low-stock',
+      type: 'LOW_STOCK',
+      title: `${criticalStockCount} sản phẩm sắp hết hàng`,
+      description: `Có ${criticalStockCount} sản phẩm có lượng tồn kho còn từ 3 sản phẩm trở xuống. Cần bổ sung nguồn hàng.`,
+      link: '/admin/products',
+    });
+  }
+
+  if (pendingOrdersCount > 0) {
+    actions.push({
+      id: 'action-pending-orders',
+      type: 'NEW_ORDER',
+      title: `${pendingOrdersCount} đơn hàng mới chờ duyệt`,
+      description: `Có ${pendingOrdersCount} đơn hàng mới đang chờ duyệt và đóng gói gửi đơn vị vận chuyển.`,
+      link: '/admin/orders',
+    });
+  }
+
+  return actions;
+}
+
+/**
+ * Tóm tắt danh sách sản phẩm trong đơn hàng dạng "Áo Thun x 2, Quần Jean x 1"
+ */
+export function formatItemsSummary(
+  items: Array<{
+    product?: { name: string } | null;
+    quantity: number;
+  }>
+): string {
+  if (!items || items.length === 0) {
+    return 'Không có sản phẩm';
+  }
+
+  return items
+    .map((item) => `${item.product?.name || 'Sản phẩm'} x ${item.quantity}`)
+    .join(', ');
+}
+
+/**
+ * Định dạng Date thành YYYY-MM-DD an toàn theo múi giờ địa phương
+ */
+export function formatDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+const VIETNAMESE_WEEKDAY_LABELS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+
+/**
+ * Lấy nhãn ngày trong tuần kiểu Việt Nam: CN, T2, T3, T4, T5, T6, T7
+ */
+export function getVietnameseDayLabel(date: Date): string {
+  return VIETNAMESE_WEEKDAY_LABELS[date.getDay()] || 'T2';
+}
+
+/**
+ * Tạo xu hướng doanh thu theo khoảng thời gian:
+ * - 'today': 24 giờ trong ngày (00h - 23h)
+ * - '7days': 7 ngày gần nhất tính đến hôm nay
+ * - 'month': 30 ngày gần nhất tính đến hôm nay
+ */
+export function buildRevenueTrend(
+  referenceDate: Date,
+  paidOrders: Array<{ totalAmount: number; createdAt: Date }>,
+  range: AnalyticsRange = '7days'
+): RevenueTrendItem[] {
+  if (range === 'today') {
+    return buildHourlyRevenueTrend(referenceDate, paidOrders);
+  }
+
+  if (range === 'month') {
+    return buildMonthlyRevenueTrend(referenceDate, paidOrders);
+  }
+
+  const dailyMap = new Map<string, { label: string; revenue: number; orders: number }>();
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(referenceDate);
+    d.setDate(d.getDate() + i);
+    const dateKey = formatDateKey(d);
+    const label = getVietnameseDayLabel(d);
+    dailyMap.set(dateKey, { label, revenue: 0, orders: 0 });
+  }
+
+  for (const order of paidOrders) {
+    const dateKey = formatDateKey(new Date(order.createdAt));
+    const item = dailyMap.get(dateKey);
+    if (item) {
+      item.revenue += order.totalAmount;
+      item.orders += 1;
+    }
+  }
+
+  return Array.from(dailyMap.entries()).map(([date, item]) => ({
+    date,
+    label: item.label,
+    revenue: item.revenue,
+    orders: item.orders,
+  }));
+}
+
+/**
+ * Tạo xu hướng doanh thu 24 giờ trong ngày (00h - 23h) cho bộ lọc 'today'
+ */
+export function buildHourlyRevenueTrend(
+  todayDate: Date,
+  paidOrders: Array<{ totalAmount: number; createdAt: Date }>
+): RevenueTrendItem[] {
+  const hourlyMap = new Map<number, { revenue: number; orders: number }>();
+  for (let h = 0; h < 24; h++) {
+    hourlyMap.set(h, { revenue: 0, orders: 0 });
+  }
+
+  const baseYear = todayDate.getFullYear();
+  const baseMonth = todayDate.getMonth();
+  const baseDay = todayDate.getDate();
+
+  for (const order of paidOrders) {
+    const d = new Date(order.createdAt);
+    if (d.getFullYear() === baseYear && d.getMonth() === baseMonth && d.getDate() === baseDay) {
+      const h = d.getHours();
+      const item = hourlyMap.get(h);
+      if (item) {
+        item.revenue += order.totalAmount;
+        item.orders += 1;
+      }
+    }
+  }
+
+  const datePrefix = formatDateKey(todayDate);
+  return Array.from(hourlyMap.entries()).map(([hour, item]) => {
+    const hourStr = String(hour).padStart(2, '0');
+    return {
+      date: `${datePrefix}T${hourStr}:00:00`,
+      label: `${hourStr}h`,
+      revenue: item.revenue,
+      orders: item.orders,
+    };
+  });
+}
+
+/**
+ * Tạo xu hướng doanh thu 30 ngày gần nhất cho bộ lọc 'month'
+ */
+export function buildMonthlyRevenueTrend(
+  startDate: Date,
+  paidOrders: Array<{ totalAmount: number; createdAt: Date }>
+): RevenueTrendItem[] {
+  const dailyMap = new Map<string, { label: string; revenue: number; orders: number }>();
+
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + i);
+    const dateKey = formatDateKey(d);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const label = `${day}/${month}`;
+    dailyMap.set(dateKey, { label, revenue: 0, orders: 0 });
+  }
+
+  for (const order of paidOrders) {
+    const dateKey = formatDateKey(new Date(order.createdAt));
+    const item = dailyMap.get(dateKey);
+    if (item) {
+      item.revenue += order.totalAmount;
+      item.orders += 1;
+    }
+  }
+
+  return Array.from(dailyMap.entries()).map(([date, item]) => ({
+    date,
+    label: item.label,
+    revenue: item.revenue,
+    orders: item.orders,
+  }));
+}
+
+const VIETNAMESE_MONTH_LABELS = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12'];
+
+/**
+ * Tạo xu hướng khách hàng mới đăng ký theo 12 tháng gần nhất
+ * (bucket tháng cũ nhất đứng đầu, tháng hiện tại ở cuối)
+ */
+export function buildNewCustomersTrend(
+  referenceDate: Date,
+  customers: Array<{ createdAt: Date }>
+): CustomerTrendItem[] {
+  const monthlyMap = new Map<string, { label: string; count: number }>();
+
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    monthlyMap.set(key, { label: VIETNAMESE_MONTH_LABELS[d.getMonth()] || `T${d.getMonth() + 1}`, count: 0 });
+  }
+
+  for (const customer of customers) {
+    const d = new Date(customer.createdAt);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const item = monthlyMap.get(key);
+    if (item) {
+      item.count += 1;
+    }
+  }
+
+  return Array.from(monthlyMap.values());
+}

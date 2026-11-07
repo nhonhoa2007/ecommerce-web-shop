@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { getDashboardAnalyticsEndpoint } from '@client/lib/dashboard-analytics';
+import { buildUrgentActions, calculateQrMatchRate } from '@server/modules/admin/admin-analytics.service';
 
-test('dashboard is protected and uses role-specific analytics', async () => {
-  const page = await readFile(new URL('../src/app/admin/page.tsx', import.meta.url), 'utf8');
-  assert.match(page, /requireOperatorPermission\('orders'\)/);
-  assert.match(page, /loadWeek4Analytics\(role\)/);
+test('dashboard uses distinct Admin and Staff analytics endpoints', () => {
+  assert.equal(getDashboardAnalyticsEndpoint('ADMIN', 'month'), '/api/admin/analytics?range=month');
+  assert.equal(getDashboardAnalyticsEndpoint('STAFF', 'today'), '/api/admin/analytics/staff');
+});
+
+test('dashboard actions link to the relevant Admin sections', () => {
+  const actions = buildUrgentActions({ unmatchedTransactionsCount: 2, criticalStockCount: 1, pendingOrdersCount: 3 });
+  assert.deepEqual(actions.map((item) => item.link), ['/admin/transactions', '/admin/products', '/admin/orders']);
+  assert.equal(calculateQrMatchRate(3, 4), 75);
 });

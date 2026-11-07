@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server';
-import { requireOperatorPermission } from '@server/modules/admin/guards';
-import { loadWeek4Analytics } from '@server/modules/admin/week4-analytics.service';
+import { requireAdmin } from '@server/modules/admin/guards';
+import { loadAdminAnalytics } from '@server/modules/admin/dashboard-analytics.service';
+import type { AnalyticsRange } from '@server/modules/admin/admin-analytics.service';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  const access = await requireOperatorPermission('orders');
+export async function GET(request: Request) {
+  const access = await requireAdmin();
   if (!access.authorized) return access.response;
+  const query = new URL(request.url).searchParams.get('range');
+  const range: AnalyticsRange = query === 'today' || query === '7days' || query === 'month' ? query : 'today';
   try {
-    const role = access.user.role === 'ADMIN' ? 'ADMIN' : 'STAFF';
-    return NextResponse.json(await loadWeek4Analytics(role), { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(await loadAdminAnalytics(range), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('Analytics failed', error);
     return NextResponse.json({ error: 'Không thể tải thống kê' }, { status: 500 });
