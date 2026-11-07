@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { canAccessAdminPage, getVisibleAdminSections } from '@shared/admin-page-access';
+
+test('Admin sees existing sections and Staff needs orders permission', () => {
+  assert.equal(canAccessAdminPage({ role: 'ADMIN' }, '/admin'), true);
+  assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['orders'] }, '/admin/orders'), true);
+  assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['products'] }, '/admin/orders'), false);
+  assert.equal(canAccessAdminPage({ role: 'CUSTOMER' }, '/admin'), false);
+  assert.deepEqual(getVisibleAdminSections({ role: 'ADMIN' }).map((item) => item.href), ['/admin', '/admin/orders']);
+});
