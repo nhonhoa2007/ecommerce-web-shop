@@ -11,6 +11,7 @@ export const ADMIN_SECTIONS = [
   { name: 'Đánh giá', href: '/admin/reviews', permission: 'reviews' },
   { name: 'Vận đơn', href: '/admin/shipments', permission: 'shipments' },
   { name: 'Giao dịch', href: '/admin/transactions', permission: 'admin', adminOnly: true },
+  { name: 'Mã giảm giá', href: '/admin/coupons', permission: 'admin', adminOnly: true },
   { name: 'Bảo hành', href: '/admin/warranties', permission: 'warranties' },
   { name: 'Đổi trả', href: '/admin/returns', permission: 'warranties' },
   { name: 'Nhật ký kiểm toán', href: '/admin/audit-logs', permission: 'admin', adminOnly: true },
