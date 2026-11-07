@@ -7,12 +7,14 @@ export const ADMIN_SECTIONS = [
   { name: 'Bảng điều khiển', href: '/admin', permission: 'orders' },
   { name: 'Đơn hàng', href: '/admin/orders', permission: 'orders' },
   { name: 'Sản phẩm', href: '/admin/products', permission: 'products' },
+  { name: 'Khách hàng', href: '/admin/customers', permission: 'admin', adminOnly: true },
 ] as const;
 
 export function canAccessAdminPage(user: AdminPageUser | null | undefined, pathname: string): boolean {
   const section = ADMIN_SECTIONS.find((item) => item.href === pathname);
   if (!section || !user) return false;
   if (user.role === 'ADMIN') return true;
+  if ('adminOnly' in section && section.adminOnly) return false;
   return user.role === 'STAFF' && Boolean(user.permissions?.includes(section.permission));
 }
 

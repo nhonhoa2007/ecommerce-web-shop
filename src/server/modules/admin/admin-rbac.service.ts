@@ -1,4 +1,5 @@
 import { verifyPassword } from '@server/modules/auth/password-hash.service';
+import { isStaffPermission } from '@shared/constants/permissions';
 import {
   filterValidPermissions,
   setStaffPermissions,
@@ -93,6 +94,16 @@ export function validateUserUpdatePayload(body: unknown): {
 
   if (role !== undefined && !['CUSTOMER', 'STAFF', 'ADMIN'].includes(role as string)) {
     return { valid: false, error: 'Vai trò không hợp lệ' };
+  }
+
+  if (isBlocked !== undefined && typeof isBlocked !== 'boolean') {
+    return { valid: false, error: 'Trạng thái khóa không hợp lệ' };
+  }
+  if (isVerified !== undefined && typeof isVerified !== 'boolean') {
+    return { valid: false, error: 'Trạng thái xác thực không hợp lệ' };
+  }
+  if (permissions !== undefined && (!Array.isArray(permissions) || !permissions.every(isStaffPermission))) {
+    return { valid: false, error: 'Danh sách quyền không hợp lệ' };
   }
 
   const parsedPermissions =
