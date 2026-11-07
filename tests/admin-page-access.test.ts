@@ -7,5 +7,13 @@ test('Admin sees existing sections and Staff needs orders permission', () => {
   assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['orders'] }, '/admin/orders'), true);
   assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['products'] }, '/admin/orders'), false);
   assert.equal(canAccessAdminPage({ role: 'CUSTOMER' }, '/admin'), false);
-  assert.deepEqual(getVisibleAdminSections({ role: 'ADMIN' }).map((item) => item.href), ['/admin', '/admin/orders']);
+  assert.deepEqual(getVisibleAdminSections({ role: 'ADMIN' }).map((item) => item.href), ['/admin', '/admin/orders', '/admin/products']);
+});
+
+test('Products section is visible only to authorized operators', () => {
+  assert.equal(canAccessAdminPage({ role: 'ADMIN' }, '/admin/products'), true);
+  assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['products'] }, '/admin/products'), true);
+  assert.equal(canAccessAdminPage({ role: 'STAFF', permissions: ['orders'] }, '/admin/products'), false);
+  assert.equal(canAccessAdminPage({ role: 'CUSTOMER' }, '/admin/products'), false);
+  assert.equal(getVisibleAdminSections({ role: 'ADMIN' }).some((item) => item.href === '/admin/products'), true);
 });

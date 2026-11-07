@@ -6,6 +6,7 @@ export interface AdminPageUser {
 export const ADMIN_SECTIONS = [
   { name: 'Bảng điều khiển', href: '/admin', permission: 'orders' },
   { name: 'Đơn hàng', href: '/admin/orders', permission: 'orders' },
+  { name: 'Sản phẩm', href: '/admin/products', permission: 'products' },
 ] as const;
 
 export function canAccessAdminPage(user: AdminPageUser | null | undefined, pathname: string): boolean {
