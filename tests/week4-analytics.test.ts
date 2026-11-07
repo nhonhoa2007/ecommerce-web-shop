@@ -1,14 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { summarizeOrders } from '@server/modules/admin/week4-analytics.service';
+import { buildRevenueComparison, calculatePaymentMethodDistribution } from '@server/modules/admin/admin-analytics.service';
 
-test('revenue includes paid orders only and groups by day', () => {
-  const data = summarizeOrders([
-    { id: '1', orderCode: 'DH1', customerName: 'A', totalAmount: 100n, paymentStatus: 'PAID', status: 'CONFIRMED', createdAt: new Date('2026-11-06T01:00:00Z') },
-    { id: '2', orderCode: 'DH2', customerName: 'B', totalAmount: 500n, paymentStatus: 'UNPAID', status: 'PENDING', createdAt: new Date('2026-11-06T02:00:00Z') },
+test('revenue trend includes paid orders in the selected and previous periods', () => {
+  const start = new Date(2026, 10, 6);
+  const data = buildRevenueComparison('today', start, [
+    { totalAmount: 100, createdAt: new Date(2026, 10, 6, 1) },
+    { totalAmount: 50, createdAt: new Date(2026, 10, 5, 1) },
   ]);
-  assert.equal(data.totalRevenue, '100');
-  assert.equal(data.totalOrders, 2);
-  assert.equal(data.revenueByDay[0].amount, '100');
-  assert.equal(data.ordersByStatus.PENDING, 1);
+  assert.equal(data.current.reduce((sum, point) => sum + point.revenue, 0), 100);
+  assert.equal(data.previous.reduce((sum, point) => sum + point.revenue, 0), 50);
+});
+
+test('payment distribution separates bank, wallet and COD orders', () => {
+  assert.deepEqual(calculatePaymentMethodDistribution([
+    { bankTransfers: [{ bankName: 'BANK' }] },
+    { bankTransfers: [{ bankName: 'SHOP_WALLET' }] },
+    { bankTransfers: [], shipment: { codAmount: 100 } },
+  ]), { vietqrPercentage: 33.3, walletPercentage: 33.3, codPercentage: 33.3 });
 });
