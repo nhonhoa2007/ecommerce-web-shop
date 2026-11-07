@@ -9,6 +9,9 @@ export const ADMIN_SECTIONS = [
   { name: 'Sản phẩm', href: '/admin/products', permission: 'products' },
   { name: 'Khách hàng', href: '/admin/customers', permission: 'admin', adminOnly: true },
   { name: 'Đánh giá', href: '/admin/reviews', permission: 'reviews' },
+  { name: 'Bảo hành', href: '/admin/warranties', permission: 'warranties' },
+  { name: 'Đổi trả', href: '/admin/returns', permission: 'warranties' },
+  { name: 'Nhật ký kiểm toán', href: '/admin/audit-logs', permission: 'admin', adminOnly: true },
 ] as const;
 
 export function canAccessAdminPage(user: AdminPageUser | null | undefined, pathname: string): boolean {
