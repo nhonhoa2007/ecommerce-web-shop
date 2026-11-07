@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ShoppingBag } from 'lucide-react';
 import { CartItem } from '@client/components/cart/CartItem';
 import { CartSummary } from '@client/components/cart/CartSummary';
+import { OrderForm } from '@client/components/cart/OrderForm';
 import { useHydrated } from '@client/hooks/useHydrated';
 import { useCartStore } from '@client/stores/cart-store';
 
@@ -49,7 +50,7 @@ export function CartView() {
             />
           ))}
         </section>
-        <CartSummary subtotal={subtotal} itemCount={itemCount} />
+        <div><CartSummary subtotal={subtotal} itemCount={itemCount} /><OrderForm /></div>
       </div>
     </main>
   );

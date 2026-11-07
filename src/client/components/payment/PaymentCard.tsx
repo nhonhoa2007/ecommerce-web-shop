@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { formatVND } from '@shared/utils';
 
 interface PaymentCardProps {
@@ -15,7 +16,7 @@ export function PaymentCard(props: PaymentCardProps) {
   return <section className="mx-auto max-w-lg rounded-3xl bg-white p-8 shadow-card">
     <h1 className="text-2xl font-semibold">Thanh toán đơn {props.orderCode}</h1>
     <p className="mt-2 text-muted-gray">Trạng thái: {props.paymentStatus === 'PAID' ? 'Đã xác nhận thanh toán' : 'Chờ xác nhận thanh toán'}</p>
-    {props.paymentStatus !== 'PAID' && props.qrUrl ? <img className="mx-auto my-6 h-64 w-64" src={props.qrUrl} alt={`Mã QR chuyển khoản cho đơn ${props.orderCode}`} /> : null}
+    {props.paymentStatus !== 'PAID' && props.qrUrl ? <Image unoptimized width={256} height={256} className="mx-auto my-6 h-64 w-64" src={props.qrUrl} alt={`Mã QR chuyển khoản cho đơn ${props.orderCode}`} /> : null}
     {!props.qrUrl && props.paymentStatus !== 'PAID' ? <p className="my-6 text-amber-800">Tài khoản ngân hàng chưa được cấu hình.</p> : null}
     <dl className="grid grid-cols-2 gap-3 border-t pt-5 text-sm">
       <dt>Số tiền</dt><dd className="text-right font-semibold">{formatVND(props.amount)}</dd>
