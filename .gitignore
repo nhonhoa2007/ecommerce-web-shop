@@ -52,8 +52,6 @@ next-env.d.ts
 # IDE tools
 .zcode/
 .zcodeignore
-.mcp.json
-.claude/
 
 # Tài liệu cá nhân & file tạm ngoài thư mục repo
 .~lock.*#

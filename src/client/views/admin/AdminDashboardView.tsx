@@ -16,6 +16,7 @@ import { AdminRealtimeOrdersCard } from '@client/components/admin/dashboard/Admi
 import { AdminActionCenter, UrgentActionItem } from '@client/components/admin/dashboard/AdminActionCenter';
 import { AdminRecentOrdersTable, RecentOrderItem } from '@client/components/admin/dashboard/AdminRecentOrdersTable';
 import { AlertTriangle, RefreshCw, ArrowRight } from 'lucide-react';
+import { ToggleGroup } from '@animate-ui/react/primitives/radix-ui/toggle-group';
 import { canAccessAdminPage } from '@shared/admin-page-access';
 
 interface AnalyticsPayload {
@@ -216,11 +217,21 @@ export function AdminDashboardView({ user }: AdminDashboardViewProps = {}) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {!isStaff && (
-            <div role="group" aria-label="Khoảng thời gian báo cáo" className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1">
+            <ToggleGroup.Root
+              type="single"
+              value={timeRange}
+              onValueChange={(value) => { if (value) handleRangeChange(value as RevenueBarRange); }}
+              aria-label="Khoảng thời gian báo cáo"
+              className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1"
+            >
               {([['today', 'Hôm nay'], ['7days', '7 ngày'], ['month', '30 ngày']] as const).map(([value, label]) => (
-                <button key={value} type="button" aria-pressed={timeRange === value} onClick={() => handleRangeChange(value)} className={`min-h-11 rounded-md px-3 text-xs font-medium ${timeRange === value ? 'bg-white text-slate-900' : 'text-slate-600 hover:bg-slate-200'}`}>{label}</button>
+                <ToggleGroup.Item
+                  key={value}
+                  value={value}
+                  className="min-h-11 rounded-md px-3 text-xs font-medium text-slate-600 hover:bg-slate-200/70 focus-visible:outline-2 focus-visible:outline-slate-700 data-[state=on]:bg-white data-[state=on]:text-slate-900"
+                >{label}</ToggleGroup.Item>
               ))}
-            </div>
+            </ToggleGroup.Root>
           )}
           <button type="button" onClick={handleRefresh} disabled={loading || refreshing} aria-label="Làm mới dữ liệu" title="Làm mới dữ liệu" className="flex size-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-slate-700 disabled:opacity-50">
             <RefreshCw className="size-4" />
@@ -244,7 +255,7 @@ export function AdminDashboardView({ user }: AdminDashboardViewProps = {}) {
             <h2 id="staff-actions-title" className="text-sm font-semibold text-slate-900">Cần xử lý</h2>
             <AdminActionCenter urgentActions={data?.urgentActions} loading={loading} />
           </section>
-          {userPermissions.includes('orders') && <AdminRecentOrdersTable orders={data?.recentOrders} loading={loading} sampleSize={5} showAmounts={false} />}
+          {userPermissions.includes('orders') && <AdminRecentOrdersTable orders={data?.recentOrders} loading={loading} sampleSize={5} />}
         </>
       ) : (
         <>

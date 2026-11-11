@@ -2,7 +2,7 @@ interface FilterableRecentOrder {
   orderCode: string;
   customerName: string;
   itemsSummary: string;
-  totalAmount?: number;
+  totalAmount: number;
   status: string;
 }
 
@@ -23,5 +23,5 @@ export function filterRecentOrders<T extends FilterableRecentOrder>(orders: read
     return !query || fold(`${order.orderCode} ${order.customerName} ${order.itemsSummary}`).includes(query);
   });
   if (!filters.amountSort) return filtered;
-  return filtered.sort((a, b) => filters.amountSort === 'asc' ? (a.totalAmount ?? 0) - (b.totalAmount ?? 0) : (b.totalAmount ?? 0) - (a.totalAmount ?? 0));
+  return filtered.sort((a, b) => filters.amountSort === 'asc' ? a.totalAmount - b.totalAmount : b.totalAmount - a.totalAmount);
 }

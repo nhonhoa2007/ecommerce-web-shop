@@ -1,26 +1,53 @@
-import Link from 'next/link';
-import { formatVND } from '@shared/utils';
+'use client';
 
-export function CartSummary({ subtotal, itemCount }: { subtotal: number; itemCount: number }) {
+import { useCartStore } from '@client/stores/cart-store';
+import { formatVND } from '@shared/utils';
+import { calculateCheckoutTotals, FREE_SHIPPING_THRESHOLD } from '@shared/utils/checkout';
+import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
+
+export function CartSummary() {
+  const items = useCartStore((s) => s.items);
+  const getTotalAmount = useCartStore((s) => s.getTotalAmount);
+
+  const total = getTotalAmount();
+  const { shippingFee, totalAmount } = calculateCheckoutTotals(total);
+
   return (
-    <aside className="h-fit rounded-[24px] bg-ink-black p-6 text-white lg:sticky lg:top-24">
-      <h2 className="text-lg font-semibold">Tóm tắt giỏ hàng</h2>
-      <div className="mt-5 space-y-3 border-b border-white/15 pb-5 text-sm">
-        <div className="flex justify-between gap-4 text-white/70">
-          <span>Sản phẩm</span>
-          <span>{itemCount}</span>
+    <div className="bg-white rounded-[28px] p-6 shadow-card sticky top-24">
+      <h3 className="text-base font-semibold text-ink-black tracking-[-0.031em] mb-4">Tóm tắt đơn hàng</h3>
+      <div className="space-y-3 text-sm">
+        <div className="flex justify-between">
+          <span className="text-muted-gray tracking-[-0.014em]">Tạm tính ({items.length} sản phẩm)</span>
+          <span className="font-medium text-ink-black tracking-[-0.014em]">{formatVND(total)}</span>
         </div>
-        <div className="flex justify-between gap-4">
-          <span>Tạm tính</span>
-          <span className="font-semibold">{formatVND(subtotal)}</span>
+        <div className="flex justify-between">
+          <span className="text-muted-gray tracking-[-0.014em]">Phí vận chuyển</span>
+          <span className="font-medium text-ink-black tracking-[-0.014em]">
+            {shippingFee === 0 ? 'Miễn phí' : formatVND(shippingFee)}
+          </span>
+        </div>
+        {shippingFee > 0 && (
+          <p className="text-[11px] text-muted-gray tracking-[-0.017em]">
+            Miễn phí vận chuyển cho đơn từ {formatVND(FREE_SHIPPING_THRESHOLD)}
+          </p>
+        )}
+        <div className="border-t border-faint-border pt-3">
+          <div className="flex justify-between">
+            <span className="font-semibold text-ink-black tracking-[-0.031em]">Tổng cộng</span>
+            <span className="text-lg font-semibold text-ink-black tracking-[-0.05em]">
+              {formatVND(totalAmount)}
+            </span>
+          </div>
         </div>
       </div>
-      <p className="mt-4 text-xs leading-5 text-white/60">
-        Giá và tồn kho sẽ được máy chủ kiểm tra lại khi tạo đơn hàng.
-      </p>
-      <Link href="/" className="mt-5 block rounded-full bg-white px-4 py-3 text-center text-sm font-medium text-ink-black">
-        Tiếp tục mua sắm
+      <Link
+        href="/checkout"
+        className="flex items-center justify-center gap-2 w-full bg-shop-violet text-white text-center py-3.5 rounded-full font-medium tracking-[-0.014em] hover:bg-shop-violet-deep transition mt-6 shadow-violet text-sm"
+      >
+        <span>Thanh toán</span>
+        <ArrowRight className="w-4 h-4" />
       </Link>
-    </aside>
+    </div>
   );
 }

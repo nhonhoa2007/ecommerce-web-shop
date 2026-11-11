@@ -1,13 +1,25 @@
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@server/modules/auth/auth-options';
 import { redirect } from 'next/navigation';
-import { requireOperatorPermission } from '@server/modules/admin/guards';
-import { loadAdminShipments } from '@server/modules/admin/shipments.controller';
+import { AdminService } from '@/server/modules/admin/admin.service';
 import { AdminShipmentsView } from '@client/views/admin/AdminShipmentsView';
+import { canAccessAdminPage } from '@shared/admin-page-access';
+import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata: Metadata = {
+  title: 'Quản lý Vận đơn GHN - Admin Shop QR',
+  description: 'Theo dõi lộ trình giao nhận bưu phẩm và quản lý vận đơn GHN',
+};
+
 export default async function AdminShipmentsPage() {
-  const access = await requireOperatorPermission('shipments');
-  if (!access.authorized) redirect(access.response.status === 401 ? '/login?callbackUrl=/admin/shipments' : '/');
-  const shipments = await loadAdminShipments();
-  return <AdminShipmentsView initialShipments={shipments} canViewOrders={access.user.role === 'ADMIN' || Boolean(access.user.permissions?.includes('orders'))} />;
+  const session = await getServerSession(authOptions);
+  if (!session?.user || !canAccessAdminPage(session.user, '/admin/shipments')) {
+    redirect('/');
+  }
+
+  const shipments = await AdminService.getAdminShipments();
+
+  return <AdminShipmentsView initialShipments={shipments} canViewOrders={canAccessAdminPage(session.user, '/admin/orders')} />;
 }

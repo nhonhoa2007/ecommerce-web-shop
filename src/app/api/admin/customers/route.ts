@@ -1,1 +1,1 @@
-export { GET, PATCH } from '@server/modules/admin/customers.controller';
+export { GET, PATCH } from '@/server/modules/admin/customers.controller';

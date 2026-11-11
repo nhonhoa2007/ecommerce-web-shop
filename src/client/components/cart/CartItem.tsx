@@ -1,61 +1,92 @@
 'use client';
 
 import Image from 'next/image';
-import Link from 'next/link';
-import { Minus, Plus, Trash2 } from 'lucide-react';
-import type { CartLine } from '@client/stores/cart-store';
+import { useCartStore } from '@client/stores/cart-store';
 import { formatVND } from '@shared/utils';
-import { isSupportedProductImageSource } from '@shared/utils/storefront';
+import { Trash2, Minus, Plus } from 'lucide-react';
+import type { CartItem as CartItemType } from '@shared/types';
 
 interface CartItemProps {
-  item: CartLine;
-  onQuantityChange: (quantity: number) => void;
-  onRemove: () => void;
+  item: CartItemType;
+  /** Khi được cung cấp, nút xóa sẽ yêu cầu xác nhận qua component cha thay vì xóa ngay */
+  onRequestRemove?: (item: CartItemType) => void;
 }
 
-export function CartItem({ item, onQuantityChange, onRemove }: CartItemProps) {
-  const imageSource = isSupportedProductImageSource(item.image) ? item.image : null;
+export function CartItem({ item, onRequestRemove }: CartItemProps) {
+  const updateQuantity = useCartStore((s) => s.updateQuantity);
+  const removeItem = useCartStore((s) => s.removeItem);
+
+  const handleRemove = () => {
+    if (onRequestRemove) {
+      onRequestRemove(item);
+    } else {
+      removeItem(item.productId, item.variantId);
+    }
+  };
 
   return (
-    <article className="flex gap-4 rounded-[24px] border border-faint-border bg-white p-4">
-      <Link
-        href={`/products/${item.productId}`}
-        className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-canvas-mist"
-      >
-        {imageSource && <Image src={imageSource} alt={item.name} fill sizes="96px" className="object-cover" />}
-      </Link>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <Link href={`/products/${item.productId}`} className="font-semibold text-ink-black hover:underline">
-              {item.name}
-            </Link>
-            {item.variantTitle && <p className="mt-1 text-xs text-muted-gray">{item.variantTitle}</p>}
+    <div className="flex flex-wrap items-center gap-3 sm:gap-4 bg-white p-4 rounded-[20px] shadow-card">
+      <div className="w-16 h-16 bg-canvas-mist rounded-[14px] overflow-hidden flex-shrink-0 relative">
+        {item.image ? (
+          <Image src={item.image} alt={item.name} fill sizes="64px" className="object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-cool-stone">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
           </div>
-          <button type="button" onClick={onRemove} className="p-2 text-muted-gray hover:text-red-600" aria-label={`Xóa ${item.name}`}>
-            <Trash2 className="h-4 w-4" />
+        )}
+      </div>
+
+      <div className="flex-1 min-w-[100px]">
+        <h3 className="font-semibold text-sm text-ink-black tracking-[-0.014em] truncate">{item.name}</h3>
+        {item.variantTitle && (
+          <div className="mt-1">
+            <span className="inline-block bg-canvas-mist text-shop-violet text-[11px] font-medium px-2.5 py-0.5 rounded-full tracking-[-0.014em]">
+              Phân loại: {item.variantTitle}
+            </span>
+          </div>
+        )}
+        <p className="text-xs text-muted-gray mt-1 tracking-[-0.017em]">{formatVND(item.price)}</p>
+      </div>
+
+      {/* Controls: xuống hàng thứ hai trên mobile, nằm ngang từ sm trở lên */}
+      <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end pl-[76px] sm:pl-0">
+        {/* Quantity controls */}
+        <div className="flex items-center border border-faint-border rounded-full bg-canvas-mist p-0.5">
+          <button
+            onClick={() => updateQuantity(item.productId, item.quantity - 1, item.variantId)}
+            className="w-10 h-10 flex items-center justify-center rounded-full text-ink-black hover:bg-white transition"
+            aria-label="Giảm số lượng"
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+          <span className="w-8 text-center text-xs font-semibold text-ink-black">{item.quantity}</span>
+          <button
+            onClick={() => updateQuantity(item.productId, item.quantity + 1, item.variantId)}
+            className="w-10 h-10 flex items-center justify-center rounded-full text-ink-black hover:bg-white transition"
+            aria-label="Tăng số lượng"
+          >
+            <Plus className="w-3.5 h-3.5" />
           </button>
         </div>
-        <p className="mt-2 text-sm font-medium text-ink-black">{formatVND(item.price)}</p>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="inline-flex items-center rounded-full border border-faint-border">
-            <button type="button" onClick={() => onQuantityChange(item.quantity - 1)} className="p-2" aria-label="Giảm số lượng">
-              <Minus className="h-3.5 w-3.5" />
-            </button>
-            <span className="min-w-8 text-center text-sm font-medium">{item.quantity}</span>
-            <button
-              type="button"
-              onClick={() => onQuantityChange(item.quantity + 1)}
-              disabled={item.quantity >= item.stock}
-              className="p-2 disabled:opacity-30"
-              aria-label="Tăng số lượng"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <p className="text-xs text-muted-gray">Tối đa {item.stock}</p>
+
+        {/* Subtotal */}
+        <div className="text-right min-w-[90px]">
+          <p className="font-semibold text-sm text-ink-black tracking-tight-display">
+            {formatVND(Number(item.price) * item.quantity)}
+          </p>
         </div>
+
+        {/* Remove */}
+        <button
+          onClick={handleRemove}
+          className="p-2.5 text-muted-gray hover:text-red-500 rounded-full hover:bg-canvas-mist transition"
+          aria-label={`Xóa ${item.name} khỏi giỏ hàng`}
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
       </div>
-    </article>
+    </div>
   );
 }

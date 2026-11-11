@@ -1,35 +1,55 @@
-import { existsSync, statSync } from 'node:fs';
+/**
+ * Resolve hook ánh xạ các path alias của tsconfig.json sang đường dẫn file thực.
+ * Xem tests/register-alias.mjs để biết cách hook được nạp.
+ */
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { existsSync, statSync } from 'node:fs';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
-const projectRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..');
-const aliases = [
+const PROJECT_ROOT = path.resolve(fileURLToPath(import.meta.url), '..', '..');
+
+const ALIASES = [
   ['@server/', 'src/server'],
   ['@shared/', 'src/shared'],
   ['@client/', 'src/client'],
   ['@/', 'src'],
 ];
-const extensions = ['', '.ts', '.tsx', '/index.ts', '/index.tsx'];
 
-function findFile(basePath) {
-  return extensions
-    .map((extension) => basePath + extension)
-    .find((candidate) => existsSync(candidate) && statSync(candidate).isFile());
+const EXTENSIONS = ['', '.ts', '.tsx', '.mts', '.cts', '/index.ts', '/index.tsx'];
+
+function resolveAlias(specifier) {
+  const mapping = ALIASES.find(([prefix]) => specifier.startsWith(prefix));
+  if (!mapping) return null;
+
+  const [prefix, target] = mapping;
+  const basePath = path.join(PROJECT_ROOT, target, specifier.slice(prefix.length));
+  const hit = EXTENSIONS.map((ext) => basePath + ext).find(
+    (candidate) => existsSync(candidate) && statSync(candidate).isFile()
+  );
+  return hit ? pathToFileURL(hit).href : null;
+}
+
+function resolveRelative(specifier, parentURL) {
+  if (!parentURL || (!specifier.startsWith('./') && !specifier.startsWith('../'))) return null;
+  if (!parentURL.startsWith('file://')) return null;
+  const parentPath = fileURLToPath(parentURL);
+  const basePath = path.resolve(path.dirname(parentPath), specifier);
+  const hit = EXTENSIONS.map((ext) => basePath + ext).find(
+    (candidate) => existsSync(candidate) && statSync(candidate).isFile()
+  );
+  return hit ? pathToFileURL(hit).href : null;
 }
 
 export function resolve(specifier, context, nextResolve) {
-  const mapping = aliases.find(([prefix]) => specifier.startsWith(prefix));
-  if (mapping) {
-    const [prefix, target] = mapping;
-    const hit = findFile(path.join(projectRoot, target, specifier.slice(prefix.length)));
-    if (hit) return { url: pathToFileURL(hit).href, shortCircuit: true };
+  if (specifier === 'next/server') {
+    return {
+      url: pathToFileURL(path.join(PROJECT_ROOT, 'node_modules/next/server.js')).href,
+      shortCircuit: true,
+    };
   }
-
-  if (context.parentURL && specifier.startsWith('.')) {
-    const parentPath = fileURLToPath(context.parentURL);
-    const hit = findFile(path.resolve(path.dirname(parentPath), specifier));
-    if (hit) return { url: pathToFileURL(hit).href, shortCircuit: true };
+  const resolved = resolveAlias(specifier) || resolveRelative(specifier, context?.parentURL);
+  if (resolved) {
+    return { url: resolved, shortCircuit: true };
   }
-
   return nextResolve(specifier, context);
 }

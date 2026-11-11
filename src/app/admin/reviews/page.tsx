@@ -1,13 +1,24 @@
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@server/modules/auth/auth-options';
 import { redirect } from 'next/navigation';
-import { requireOperatorPermission } from '@server/modules/admin/guards';
-import { loadAdminReviews } from '@server/modules/reviews/admin-reviews.controller';
+import { AdminService } from '@/server/modules/admin/admin.service';
 import { AdminReviewsView } from '@client/views/admin/AdminReviewsView';
+import { canAccessAdminPage, canUseAdminOnlyAction } from '@shared/admin-page-access';
+import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata: Metadata = {
+  title: 'Kiểm duyệt đánh giá | Quản trị viên Shop QR',
+};
+
 export default async function AdminReviewsPage() {
-  const access = await requireOperatorPermission('reviews');
-  if (!access.authorized) redirect(access.response.status === 401 ? '/login?callbackUrl=/admin/reviews' : '/');
-  const reviews = await loadAdminReviews();
-  return <AdminReviewsView initialReviews={reviews} canDelete={access.user.role === 'ADMIN'} />;
+  const session = await getServerSession(authOptions);
+  if (!session?.user || !canAccessAdminPage(session.user, '/admin/reviews')) {
+    redirect('/');
+  }
+
+  const reviews = await AdminService.getAdminReviews();
+
+  return <AdminReviewsView initialReviews={reviews} canDelete={canUseAdminOnlyAction(session.user.role)} />;
 }

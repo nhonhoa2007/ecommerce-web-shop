@@ -33,7 +33,7 @@ export interface AdminOrder {
   customerPhone: string;
   customerEmail?: string;
   customerAddress: string;
-  totalAmount?: string;
+  totalAmount: number;
   status: string;
   paymentStatus: string;
   note?: string;
@@ -41,12 +41,12 @@ export interface AdminOrder {
   items: {
     id: string;
     quantity: number;
-    price?: string;
+    price: number;
     product: { name: string; image?: string };
   }[];
 }
 
-export function AdminOrdersView({ initialOrders, initialQuery = '', initialStatus = 'ALL', canViewFinancials }: { initialOrders: AdminOrder[]; initialQuery?: string; initialStatus?: string; canViewFinancials: boolean }) {
+export function AdminOrdersView({ initialOrders, initialQuery = '', initialStatus = 'ALL' }: { initialOrders: AdminOrder[]; initialQuery?: string; initialStatus?: string }) {
   const [orders, setOrders] = useState<AdminOrder[]>(initialOrders);
   const [filterStatus, setFilterStatus] = useState<string>(initialStatus);
   const [filterPayment, setFilterPayment] = useState<string>('ALL');
@@ -56,7 +56,7 @@ export function AdminOrdersView({ initialOrders, initialQuery = '', initialStatu
   const handleUpdate = async (orderId: string, payload: { status: string }) => {
     setUpdatingId(orderId);
     try {
-      const res = await fetch(`/api/orders/${orderId}/status`, {
+      const res = await fetch(`/api/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -70,21 +70,6 @@ export function AdminOrdersView({ initialOrders, initialQuery = '', initialStatu
       toast.success('Đã cập nhật trạng thái đơn hàng!');
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Lỗi cập nhật');
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  const confirmPayment = async (orderId: string) => {
-    setUpdatingId(orderId);
-    try {
-      const response = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}/confirm-payment`, { method: 'POST' });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || 'Không thể xác nhận thanh toán');
-      setOrders((previous) => previous.map((order) => order.id === orderId ? { ...order, paymentStatus: 'PAID', status: 'CONFIRMED' } : order));
-      toast.success('Đã xác nhận thanh toán');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Không thể xác nhận thanh toán');
     } finally {
       setUpdatingId(null);
     }
@@ -149,9 +134,9 @@ export function AdminOrdersView({ initialOrders, initialQuery = '', initialStatu
                 </div>
 
                 <div className="text-right">
-                  {canViewFinancials && order.totalAmount && <p className="text-xl font-bold text-blue-600">
+                  <p className="text-xl font-bold text-blue-600">
                     {formatVND(order.totalAmount)}
-                  </p>}
+                  </p>
                   <p className="text-xs text-gray-500">
                     {order.items.reduce((s, i) => s + i.quantity, 0)} món hàng
                   </p>
@@ -195,9 +180,9 @@ export function AdminOrdersView({ initialOrders, initialQuery = '', initialStatu
                         <span className="text-gray-700 truncate max-w-[240px]">
                           {item.product.name} × {item.quantity}
                         </span>
-                        {canViewFinancials && item.price && <span className="font-medium text-gray-900">
-                          {formatVND(BigInt(item.price) * BigInt(item.quantity))}
-                        </span>}
+                        <span className="font-medium text-gray-900">
+                          {formatVND(item.price * item.quantity)}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -208,14 +193,38 @@ export function AdminOrdersView({ initialOrders, initialQuery = '', initialStatu
               <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-gray-100 bg-gray-50/50 -mx-6 -mb-6 p-4 rounded-b-2xl">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs text-gray-500 font-medium">Chuyển tiến độ:</span>
-                  {({ PENDING: [['CONFIRMED', 'Xác nhận'], ['CANCELLED', 'Hủy đơn']], CONFIRMED: [['PROCESSING', 'Đang xử lý'], ['CANCELLED', 'Hủy đơn']], PROCESSING: [['SHIPPING', 'Đang giao'], ['CANCELLED', 'Hủy đơn']], SHIPPING: [['COMPLETED', 'Hoàn tất']] } as Record<string, string[][]>)[order.status]?.map(([status, label]) => <button
-                    key={status}
+                  <button
                     type="button"
-                    disabled={updatingId !== null}
-                    onClick={() => handleUpdate(order.id, { status })}
-                    className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-                  >{label}</button>)}
-                  {order.paymentStatus === 'UNPAID' && order.status === 'PENDING' && <button type="button" disabled={updatingId !== null} onClick={() => confirmPayment(order.id)} className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 disabled:opacity-50">Xác nhận đã nhận tiền</button>}
+                    disabled={updatingId === order.id}
+                    onClick={() => handleUpdate(order.id, { status: 'CONFIRMED' })}
+                    className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-medium transition"
+                  >
+                    Xác nhận
+                  </button>
+                  <button
+                    type="button"
+                    disabled={updatingId === order.id}
+                    onClick={() => handleUpdate(order.id, { status: 'SHIPPING' })}
+                    className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-medium transition"
+                  >
+                    Đang giao
+                  </button>
+                  <button
+                    type="button"
+                    disabled={updatingId === order.id}
+                    onClick={() => handleUpdate(order.id, { status: 'COMPLETED' })}
+                    className="px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg text-xs font-medium transition"
+                  >
+                    Hoàn tất
+                  </button>
+                  <button
+                    type="button"
+                    disabled={updatingId === order.id}
+                    onClick={() => handleUpdate(order.id, { status: 'CANCELLED' })}
+                    className="px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg text-xs font-medium transition"
+                  >
+                    Hủy đơn
+                  </button>
                 </div>
 
                 {order.paymentStatus === 'PAID' && (

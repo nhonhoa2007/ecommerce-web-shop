@@ -1,84 +1,155 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@server/modules/auth/auth-options';
 import { prisma } from '@server/database/prisma';
-import { requireAdmin } from './guards';
-import { validateCouponCreate } from './coupon-input';
 import { serializeCouponDto } from '@server/modules/money/money-serialization';
 
-export const dynamic = 'force-dynamic';
-
 export async function GET() {
-  const access = await requireAdmin();
-  if (!access.authorized) return access.response;
   try {
+    const session = await getServerSession(authOptions);
+    if (!session || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const coupons = await prisma.coupon.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { orders: true } } },
+      include: {
+        _count: {
+          select: { orders: true },
+        },
+      },
     });
+
     return NextResponse.json({ coupons: coupons.map(serializeCouponDto) });
   } catch (error) {
     console.error('Fetch coupons error:', error);
-    return NextResponse.json({ error: 'Lỗi tải mã giảm giá' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-export async function POST(request: Request) {
-  const access = await requireAdmin();
-  if (!access.authorized) return access.response;
-  let body: unknown;
-  try { body = await request.json(); } catch {
-    return NextResponse.json({ error: 'Dữ liệu không hợp lệ' }, { status: 400 });
-  }
-  const validation = validateCouponCreate(body);
-  if (!validation.valid) return NextResponse.json({ error: validation.error }, { status: 400 });
+export async function POST(req: Request) {
   try {
-    const coupon = await prisma.coupon.create({ data: validation.data });
-    return NextResponse.json(serializeCouponDto(coupon), { status: 201 });
-  } catch (error) {
-    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
-      return NextResponse.json({ error: 'Mã giảm giá đã tồn tại' }, { status: 409 });
+    const session = await getServerSession(authOptions);
+    if (!session || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const body = await req.json();
+    const {
+      code,
+      description,
+      discountType,
+      discountValue,
+      maxDiscount,
+      minOrderAmount,
+      usageLimit,
+      perUserLimit,
+      startDate,
+      endDate,
+      isActive,
+    } = body;
+
+    if (!code || discountValue <= 0) {
+      return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (start >= end) {
+      return NextResponse.json({ error: 'Start date must be before end date' }, { status: 400 });
+    }
+
+    const newCoupon = await prisma.coupon.create({
+      data: {
+        code: code.trim().toUpperCase(),
+        description,
+        discountType,
+        discountValue,
+        maxDiscount,
+        minOrderAmount: minOrderAmount || 0,
+        usageLimit: usageLimit || 100,
+        perUserLimit: perUserLimit || 1,
+        startDate: start,
+        endDate: end,
+        isActive: isActive ?? true,
+      },
+    });
+
+    return NextResponse.json(serializeCouponDto(newCoupon), { status: 201 });
+  } catch (error: unknown) {
     console.error('Create coupon error:', error);
-    return NextResponse.json({ error: 'Lỗi tạo mã giảm giá' }, { status: 500 });
+    const errObj = error as { code?: string };
+    if (errObj.code === 'P2002') {
+      return NextResponse.json({ error: 'Mã giảm giá đã tồn tại' }, { status: 400 });
+    }
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-export async function PATCH(request: Request) {
-  const access = await requireAdmin();
-  if (!access.authorized) return access.response;
-  let body: unknown;
-  try { body = await request.json(); } catch {
-    return NextResponse.json({ error: 'Dữ liệu không hợp lệ' }, { status: 400 });
-  }
-  const raw = body && typeof body === 'object' ? body as Record<string, unknown> : {};
-  if (typeof raw.id !== 'string' || !raw.id.trim() || typeof raw.isActive !== 'boolean') {
-    return NextResponse.json({ error: 'Thiếu ID hoặc trạng thái' }, { status: 400 });
-  }
+export async function PATCH(req: Request) {
   try {
-    const coupon = await prisma.coupon.update({ where: { id: raw.id }, data: { isActive: raw.isActive } });
-    return NextResponse.json({ success: true, coupon: serializeCouponDto(coupon) });
-  } catch (error) {
+    const session = await getServerSession(authOptions);
+    if (!session || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { id, isActive } = body;
+
+    if (!id || typeof isActive !== 'boolean') {
+      return NextResponse.json({ error: 'Thiếu ID hoặc trạng thái isActive' }, { status: 400 });
+    }
+
+    const updated = await prisma.coupon.update({
+      where: { id },
+      data: { isActive },
+    });
+
+    return NextResponse.json({ success: true, coupon: serializeCouponDto(updated) });
+  } catch (error: unknown) {
     console.error('Update coupon error:', error);
     return NextResponse.json({ error: 'Lỗi cập nhật mã giảm giá' }, { status: 500 });
   }
 }
 
-export async function DELETE(request: Request) {
-  const access = await requireAdmin();
-  if (!access.authorized) return access.response;
-  const id = new URL(request.url).searchParams.get('id');
-  if (!id) return NextResponse.json({ error: 'Thiếu ID mã giảm giá' }, { status: 400 });
+export async function DELETE(req: Request) {
   try {
-    const coupon = await prisma.coupon.findUnique({ where: { id }, select: { id: true } });
-    if (!coupon) return NextResponse.json({ error: 'Không tìm thấy mã giảm giá' }, { status: 404 });
-    const ordersCount = await prisma.order.count({ where: { couponId: id } });
-    if (ordersCount > 0) {
-      const updated = await prisma.coupon.update({ where: { id }, data: { isActive: false } });
-      return NextResponse.json({ success: true, softDeactivated: true, message: 'Mã đã được dùng nên chỉ vô hiệu hóa.', coupon: serializeCouponDto(updated) });
+    const session = await getServerSession(authOptions);
+    if (!session || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    await prisma.coupon.delete({ where: { id } });
-    return NextResponse.json({ success: true });
-  } catch (error) {
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'Missing coupon ID' }, { status: 400 });
+    }
+
+    // Check if coupon has been used in orders
+    const ordersCount = await prisma.order.count({ where: { couponId: id } });
+
+    if (ordersCount > 0) {
+      // Soft-deactivate to protect relational order history
+      const updated = await prisma.coupon.update({
+        where: { id },
+        data: { isActive: false },
+      });
+      return NextResponse.json({
+        success: true,
+        softDeactivated: true,
+        message: 'Mã giảm giá đã có đơn hàng sử dụng trong lịch sử. Hệ thống đã chuyển sang Vô hiệu hóa (Tắt) thay vì xóa cứng.',
+        coupon: serializeCouponDto(updated),
+      });
+    }
+
+    await prisma.coupon.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true, message: 'Đã xóa mã giảm giá thành công' });
+  } catch (error: unknown) {
     console.error('Delete coupon error:', error);
-    return NextResponse.json({ error: 'Lỗi xóa mã giảm giá' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

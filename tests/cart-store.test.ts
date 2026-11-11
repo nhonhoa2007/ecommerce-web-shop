@@ -1,65 +1,152 @@
+import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { useCartStore } from '@client/stores/cart-store';
+import { useCartStore } from '../src/client/stores/cart-store.ts';
 
-const baseItem = {
-  productId: 'product-1',
-  name: 'Bàn phím cơ',
-  price: 1_500_000,
-  image: '/keyboard.png',
-  stock: 5,
-  variantId: null,
-  variantTitle: null,
-};
+describe('Cart Store Multi-Variant Logic', () => {
+  beforeEach(() => {
+    useCartStore.getState().clearCart();
+  });
 
-test.beforeEach(() => useCartStore.getState().clearCart());
+  it('should add base product without variant', () => {
+    const store = useCartStore.getState();
+    store.addItem({
+      productId: 'prod_1',
+      name: 'Áo thun basic',
+      price: 150_000,
+    });
 
-test('cart accumulates the same line and clamps it to available stock', () => {
-  useCartStore.getState().addItem(baseItem, 2.8);
-  useCartStore.getState().addItem(baseItem, 10);
+    const state = useCartStore.getState();
+    assert.equal(state.items.length, 1);
+    assert.equal(state.items[0].productId, 'prod_1');
+    assert.equal(state.items[0].variantId, null);
+    assert.equal(state.items[0].quantity, 1);
+    assert.equal(state.getTotalAmount(), 150_000);
+    assert.equal(state.getTotalItems(), 1);
+  });
 
-  const state = useCartStore.getState();
-  assert.equal(state.items.length, 1);
-  assert.equal(state.items[0].quantity, 5);
-  assert.equal(state.getTotalItems(), 5);
-  assert.equal(state.getTotalAmount(), 7_500_000);
-});
+  it('should treat different variants of the same product as separate cart items', () => {
+    const store = useCartStore.getState();
+    store.addItem({
+      productId: 'prod_1',
+      name: 'Áo thun basic',
+      price: 150_000,
+      variantId: 'var_m',
+      variantTitle: 'Size M',
+    });
 
-test('cart keeps variants of one product as separate lines', () => {
-  useCartStore.getState().addItem(baseItem, 1);
-  useCartStore.getState().addItem(
-    { ...baseItem, variantId: 'blue', variantTitle: 'Màu xanh', price: 1_600_000 },
-    2,
-  );
+    store.addItem({
+      productId: 'prod_1',
+      name: 'Áo thun basic',
+      price: 160_000,
+      variantId: 'var_l',
+      variantTitle: 'Size L',
+    });
 
-  assert.deepEqual(
-    useCartStore.getState().items.map((item) => [item.variantId, item.quantity]),
-    [
-      [null, 1],
-      ['blue', 2],
-    ],
-  );
-});
+    const state = useCartStore.getState();
+    assert.equal(state.items.length, 2);
+    assert.equal(state.items[0].variantId, 'var_m');
+    assert.equal(state.items[0].quantity, 1);
+    assert.equal(state.items[1].variantId, 'var_l');
+    assert.equal(state.items[1].quantity, 1);
+    assert.equal(state.getTotalAmount(), 310_000);
+    assert.equal(state.getTotalItems(), 2);
+  });
 
-test('cart normalizes positive quantities and removes zero quantities', () => {
-  useCartStore.getState().addItem(baseItem, -4);
-  assert.equal(useCartStore.getState().items[0].quantity, 1);
+  it('should accumulate quantity when adding the exact same variant', () => {
+    const store = useCartStore.getState();
+    store.addItem(
+      {
+        productId: 'prod_1',
+        name: 'Áo thun basic',
+        price: 150_000,
+        variantId: 'var_m',
+        variantTitle: 'Size M',
+      },
+      2
+    );
 
-  useCartStore.getState().updateItemQuantity('product-1', 99.9, null);
-  assert.equal(useCartStore.getState().items[0].quantity, 5);
+    store.addItem(
+      {
+        productId: 'prod_1',
+        name: 'Áo thun basic',
+        price: 150_000,
+        variantId: 'var_m',
+        variantTitle: 'Size M',
+      },
+      3
+    );
 
-  useCartStore.getState().updateItemQuantity('product-1', 0, null);
-  assert.equal(useCartStore.getState().items.length, 0);
-});
+    const state = useCartStore.getState();
+    assert.equal(state.items.length, 1);
+    assert.equal(state.items[0].quantity, 5);
+    assert.equal(state.getTotalAmount(), 750_000);
+  });
 
-test('cart ignores items with no stock and removes only the requested variant', () => {
-  useCartStore.getState().addItem({ ...baseItem, stock: 0 }, 1);
-  assert.equal(useCartStore.getState().items.length, 0);
+  it('should update quantity for a specific variant without mutating other variants', () => {
+    const store = useCartStore.getState();
+    store.addItem({
+      productId: 'prod_1',
+      name: 'Áo thun basic',
+      price: 150_000,
+      variantId: 'var_m',
+      variantTitle: 'Size M',
+    });
 
-  useCartStore.getState().addItem(baseItem, 1);
-  useCartStore.getState().addItem({ ...baseItem, variantId: 'blue', variantTitle: 'Màu xanh' }, 1);
-  useCartStore.getState().removeItem('product-1', 'blue');
+    store.addItem({
+      productId: 'prod_1',
+      name: 'Áo thun basic',
+      price: 160_000,
+      variantId: 'var_l',
+      variantTitle: 'Size L',
+    });
 
-  assert.equal(useCartStore.getState().items.length, 1);
-  assert.equal(useCartStore.getState().items[0].variantId, null);
+    useCartStore.getState().updateQuantity('prod_1', 4, 'var_m');
+
+    const state = useCartStore.getState();
+    const itemM = state.items.find((i) => i.variantId === 'var_m');
+    const itemL = state.items.find((i) => i.variantId === 'var_l');
+
+    assert.equal(itemM?.quantity, 4);
+    assert.equal(itemL?.quantity, 1);
+    assert.equal(state.getTotalAmount(), 150_000 * 4 + 160_000 * 1);
+  });
+
+  it('should remove a specific variant without removing other variants of the same product', () => {
+    const store = useCartStore.getState();
+    store.addItem({
+      productId: 'prod_1',
+      name: 'Áo thun basic',
+      price: 150_000,
+      variantId: 'var_m',
+    });
+
+    store.addItem({
+      productId: 'prod_1',
+      name: 'Áo thun basic',
+      price: 160_000,
+      variantId: 'var_l',
+    });
+
+    useCartStore.getState().removeItem('prod_1', 'var_m');
+
+    const state = useCartStore.getState();
+    assert.equal(state.items.length, 1);
+    assert.equal(state.items[0].variantId, 'var_l');
+    assert.equal(state.getTotalAmount(), 160_000);
+  });
+
+  it('should remove item when updateQuantity is called with zero', () => {
+    const store = useCartStore.getState();
+    store.addItem({
+      productId: 'prod_1',
+      name: 'Áo thun basic',
+      price: 150_000,
+      variantId: 'var_m',
+    });
+
+    useCartStore.getState().updateQuantity('prod_1', 0, 'var_m');
+
+    const state = useCartStore.getState();
+    assert.equal(state.items.length, 0);
+  });
 });

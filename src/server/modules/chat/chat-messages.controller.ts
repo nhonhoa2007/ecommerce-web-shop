@@ -11,14 +11,10 @@ export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const body = await req.json() as { roomId?: unknown; content?: unknown };
-    const roomId = typeof body.roomId === 'string' ? body.roomId.trim() : '';
-    const content = typeof body.content === 'string' ? body.content.trim() : '';
-    if (!roomId || !content || content.length > 5000) {
-      return NextResponse.json({ error: 'Tin nhắn không hợp lệ' }, { status: 400 });
-    }
+    const { roomId, content, type = 'TEXT' } = await req.json();
+    if (!roomId || !content) return NextResponse.json({ error: 'Missing data' }, { status: 400 });
 
-    const room = await prisma.chatRoom.findUnique({
+    const room = await (prisma as any).chatRoom.findUnique({
       where: { id: roomId },
     });
     if (!room) return NextResponse.json({ error: 'Room not found' }, { status: 404 });
@@ -27,14 +23,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     if (session.user.role === 'ADMIN' && !room.assignedStaffId) {
-      await prisma.chatRoom.update({
+      await (prisma as any).chatRoom.update({
         where: { id: roomId },
         data: { assignedStaffId: session.user.id },
       });
     }
 
     const message = await prisma.message.create({
-      data: { roomId, senderId: session.user.id, content, type: 'TEXT' },
+      data: { roomId, senderId: session.user.id, content, type },
       include: { sender: { select: { id: true, name: true, avatar: true } } },
     });
 
@@ -43,7 +39,7 @@ export async function POST(req: Request) {
       data: { lastMessage: content, lastActiveAt: new Date() },
     });
 
-    try { await pusherServer.trigger(`private-chat-${roomId}`, 'new-message', {
+    await pusherServer.trigger(`private-chat-${roomId}`, 'new-message', {
       id: message.id,
       content: message.content,
       sender: message.sender,
@@ -52,21 +48,17 @@ export async function POST(req: Request) {
       type: message.type,
       roomId: message.roomId,
       isRead: false,
-    }); } catch (error) {
-      console.warn('Pusher delivery failed after message was saved:', error);
-    }
+    });
 
     const otherUserId = room.customerId === session.user.id ? room.assignedStaffId : room.customerId;
     if (otherUserId) {
-      try { await createNotification({
+      await createNotification({
         userId: otherUserId,
         type: 'NEW_MESSAGE',
         title: `Tin nhắn mới từ ${session.user.name || 'User'}`,
         message: content.slice(0, 100),
         data: { chatRoomId: roomId },
-      }); } catch (error) {
-        console.warn('Chat notification failed after message was saved:', error);
-      }
+      });
     }
 
     return NextResponse.json({ message, ...message });
@@ -85,7 +77,7 @@ export async function GET(req: Request) {
     const roomId = searchParams.get('roomId');
     if (!roomId) return NextResponse.json({ error: 'Missing roomId' }, { status: 400 });
 
-    const room = await prisma.chatRoom.findUnique({
+    const room = await (prisma as any).chatRoom.findUnique({
       where: { id: roomId },
     });
     if (!room) return NextResponse.json({ error: 'Room not found' }, { status: 404 });
@@ -94,7 +86,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     if (session.user.role === 'ADMIN' && !room.assignedStaffId) {
-      await prisma.chatRoom.update({
+      await (prisma as any).chatRoom.update({
         where: { id: roomId },
         data: { assignedStaffId: session.user.id },
       });

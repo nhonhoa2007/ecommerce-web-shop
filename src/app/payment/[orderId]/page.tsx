@@ -1,21 +1,41 @@
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@server/modules/auth/auth-options';
+import { PaymentView } from '@client/views/PaymentView';
+import { CustomerOrderService } from '@/server/modules/orders/customer-orders.service';
+import { getBankInfo } from '@server/modules/payment/vietqr.service';
 import { notFound } from 'next/navigation';
-import { prisma } from '@server/database/prisma';
-import { getBankDetails, buildPaymentQrUrl } from '@server/modules/payment/qr.service';
-import { PaymentCard } from '@client/components/payment/PaymentCard';
 
 export const dynamic = 'force-dynamic';
 
 export default async function PaymentPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = await params;
-  const order = await prisma.order.findUnique({ where: { id: orderId }, select: {
-    orderCode: true, totalAmount: true, paymentStatus: true,
-  } });
+  const session = await getServerSession(authOptions);
+
+  const order = await CustomerOrderService.getOrderForPayment(orderId);
   if (!order) notFound();
-  const bank = getBankDetails();
-  return <main className="px-4 py-12"><PaymentCard
-    orderCode={order.orderCode} amount={order.totalAmount.toString()}
-    qrUrl={buildPaymentQrUrl(bank, order.orderCode, order.totalAmount)}
-    bankName={bank.bankId} accountNo={bank.accountNo} accountName={bank.accountName}
-    paymentStatus={order.paymentStatus}
-  /></main>;
+
+  const bankInfo = getBankInfo();
+
+  return (
+    <PaymentView
+      orderId={order.id}
+      orderCode={order.orderCode}
+      qrUrl={order.qrContent || ''}
+      totalAmount={order.totalAmount}
+      expiresAt={order.expiresAt.toISOString()}
+      bankInfo={{
+        bankName: bankInfo.displayName,
+        accountNo: bankInfo.accountNo,
+        accountName: bankInfo.accountName,
+      }}
+      userId={session?.user?.id}
+      initialPaymentStatus={
+        order.paymentStatus === 'PAID'
+          ? 'paid'
+          : order.paymentStatus === 'EXPIRED'
+          ? 'expired'
+          : 'waiting'
+      }
+    />
+  );
 }

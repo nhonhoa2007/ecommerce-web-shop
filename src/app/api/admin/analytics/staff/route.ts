@@ -1,16 +1,36 @@
 import { NextResponse } from 'next/server';
-import { requireOperatorPermission } from '@server/modules/admin/guards';
-import { loadStaffDashboard } from '@server/modules/admin/staff-dashboard.service';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@server/modules/auth/auth-options';
+import { getStaffPermissions } from '@server/modules/admin/permission.service';
+import { getStaffDashboardData } from '@server/modules/admin/staff-analytics.service';
+import type { StaffPermission } from '@shared/constants/permissions';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const access = await requireOperatorPermission('orders');
-  if (!access.authorized) return access.response;
   try {
-    return NextResponse.json(await loadStaffDashboard(access.user.permissions ?? ['orders']), { headers: { 'Cache-Control': 'no-store' } });
-  } catch (error) {
-    console.error('Staff analytics failed', error);
-    return NextResponse.json({ error: 'Không thể tải thống kê vận hành' }, { status: 500 });
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.user.role !== 'STAFF' && session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 });
+    }
+
+    let permissions = (session.user as { permissions?: StaffPermission[] }).permissions;
+    if (!permissions || permissions.length === 0) {
+      if (session.user.role === 'ADMIN') {
+        permissions = ['orders', 'products', 'shipments', 'chat', 'reviews'];
+      } else {
+        permissions = await getStaffPermissions(session.user.id);
+      }
+    }
+
+    const data = await getStaffDashboardData(permissions);
+    return NextResponse.json(data);
+  } catch (error: unknown) {
+    console.error('Fetch staff analytics error:', error);
+    return NextResponse.json({ error: 'Lỗi tải dữ liệu báo cáo vận hành' }, { status: 500 });
   }
 }

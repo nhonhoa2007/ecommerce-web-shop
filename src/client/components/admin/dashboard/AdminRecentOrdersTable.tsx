@@ -13,7 +13,7 @@ export interface RecentOrderItem {
   customerName: string;
   customerPhone?: string;
   itemsSummary: string;
-  totalAmount?: number;
+  totalAmount: number;
   paymentStatus: string;
   status: string;
   createdAt: string;
@@ -23,7 +23,6 @@ export interface AdminRecentOrdersTableProps {
   orders?: RecentOrderItem[];
   loading?: boolean;
   sampleSize?: number;
-  showAmounts?: boolean;
 }
 
 const ORDER_STATUS: Record<string, string> = {
@@ -37,11 +36,11 @@ function paymentLabel(status: string): string {
   return 'Chờ thanh toán';
 }
 
-export function AdminRecentOrdersTable({ orders, loading = false, sampleSize = 20, showAmounts = true }: AdminRecentOrdersTableProps) {
+export function AdminRecentOrdersTable({ orders, loading = false, sampleSize = 20 }: AdminRecentOrdersTableProps) {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('ALL');
   const [amountSort, setAmountSort] = useState<'asc' | 'desc' | null>(null);
-  const rows = filterRecentOrders(orders ?? [], { query, status, amountSort: showAmounts ? amountSort : null });
+  const rows = filterRecentOrders(orders ?? [], { query, status, amountSort });
   return <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5" aria-labelledby="recent-orders-title">
     <div className="mb-3 flex items-center justify-between gap-3">
       <div><h2 id="recent-orders-title" className="text-sm font-semibold text-slate-900">Đơn hàng gần đây</h2><p className="mt-1 text-xs text-slate-500">Tìm và lọc trong {sampleSize} đơn mới nhất.</p></div>
@@ -54,21 +53,21 @@ export function AdminRecentOrdersTable({ orders, loading = false, sampleSize = 2
     {loading && !orders ? <div className="h-24 rounded-md bg-slate-100" aria-hidden="true" /> : rows.length === 0 ? <p className="py-8 text-center text-sm text-slate-500">Không có đơn hàng phù hợp.</p> : <>
       <div className="space-y-0 divide-y divide-slate-100 sm:hidden">
         {rows.map((order) => <Link key={order.id} href={`/admin/orders?search=${encodeURIComponent(order.orderCode)}`} className="block py-3 hover:bg-slate-50">
-          <div className="flex items-start justify-between gap-2"><span className="text-sm font-medium text-slate-900">#{order.orderCode.replace(/^#/, '')}</span>{showAmounts && order.totalAmount !== undefined && <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">{formatVND(order.totalAmount)}</span>}</div>
+          <div className="flex items-start justify-between gap-2"><span className="text-sm font-medium text-slate-900">#{order.orderCode.replace(/^#/, '')}</span><span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">{formatVND(order.totalAmount)}</span></div>
           <p className="mt-1 truncate text-xs text-slate-600">{order.customerName} · {ORDER_STATUS[order.status] ?? order.status}</p>
           <p className="mt-0.5 text-xs text-slate-500">{paymentLabel(order.paymentStatus)}</p>
         </Link>)}
       </div>
       <div className="hidden overflow-x-auto sm:block">
         <table className="w-full min-w-[620px] text-left text-xs">
-          <thead><tr className="border-b border-slate-200 text-slate-500"><th scope="col" className="py-2 font-medium">Mã đơn</th><th scope="col" className="py-2 font-medium">Khách hàng / sản phẩm</th><th scope="col" className="py-2 font-medium">Thanh toán</th><th scope="col" className="py-2 font-medium">Trạng thái</th>{showAmounts && <th scope="col" className="py-2 text-right font-medium"><button type="button" onClick={() => setAmountSort((current) => current === 'desc' ? 'asc' : 'desc')} aria-label={`Sắp xếp tổng tiền ${amountSort === 'desc' ? 'tăng dần' : 'giảm dần'}`} className="inline-flex items-center gap-1 hover:text-slate-900">Tổng tiền <ArrowUpDown className="size-3" /></button></th>}</tr></thead>
+          <thead><tr className="border-b border-slate-200 text-slate-500"><th scope="col" className="py-2 font-medium">Mã đơn</th><th scope="col" className="py-2 font-medium">Khách hàng / sản phẩm</th><th scope="col" className="py-2 font-medium">Thanh toán</th><th scope="col" className="py-2 font-medium">Trạng thái</th><th scope="col" className="py-2 text-right font-medium"><button type="button" onClick={() => setAmountSort((current) => current === 'desc' ? 'asc' : 'desc')} aria-label={`Sắp xếp tổng tiền ${amountSort === 'desc' ? 'tăng dần' : 'giảm dần'}`} className="inline-flex items-center gap-1 hover:text-slate-900">Tổng tiền <ArrowUpDown className="size-3" /></button></th></tr></thead>
           <tbody className="divide-y divide-slate-100">
             {rows.map((order) => <tr key={order.id} className="hover:bg-slate-50">
               <td className="py-3 font-medium text-slate-900"><Link href={`/admin/orders?search=${encodeURIComponent(order.orderCode)}`} className="hover:underline">#{order.orderCode.replace(/^#/, '')}</Link></td>
               <td className="max-w-[220px] py-3"><span className="block truncate font-medium text-slate-800">{order.customerName}</span><span className="block truncate text-slate-500" title={order.itemsSummary}>{order.itemsSummary}</span></td>
               <td className="py-3 text-slate-600">{paymentLabel(order.paymentStatus)}</td>
               <td className="py-3 text-slate-600">{ORDER_STATUS[order.status] ?? order.status}</td>
-              {showAmounts && <td className="py-3 text-right font-medium tabular-nums text-slate-900">{formatVND(order.totalAmount ?? 0)}</td>}
+              <td className="py-3 text-right font-medium tabular-nums text-slate-900">{formatVND(order.totalAmount)}</td>
             </tr>)}
           </tbody>
         </table>

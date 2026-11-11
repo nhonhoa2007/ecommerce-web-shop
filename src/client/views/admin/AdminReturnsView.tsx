@@ -4,16 +4,7 @@ import React from 'react';
 import { RotateCcw } from 'lucide-react';
 
 export interface AdminReturnsViewProps {
-  initialReturns: Array<{
-    id: string;
-    returnNumber: string;
-    status: string;
-    disposition?: string | null;
-    order?: { orderCode?: string | null } | null;
-    items?: unknown[] | null;
-    reason: string;
-    createdAt: string | Date;
-  }>;
+  initialReturns: any[];
 }
 
 export function AdminReturnsView({ initialReturns }: AdminReturnsViewProps) {

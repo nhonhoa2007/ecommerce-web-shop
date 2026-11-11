@@ -1,13 +1,27 @@
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@server/modules/auth/auth-options';
 import { redirect } from 'next/navigation';
-import { requireAdmin } from '@server/modules/admin/guards';
-import { loadAdminCustomers } from '@server/modules/admin/customers.controller';
+import { AdminService } from '@/server/modules/admin/admin.service';
 import { AdminCustomersView } from '@client/views/admin/AdminCustomersView';
+import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata: Metadata = {
+  title: 'Quản lý Người dùng & Phân quyền | Quản trị viên Shop QR',
+};
+
 export default async function AdminCustomersPage() {
-  const access = await requireAdmin();
-  if (!access.authorized) redirect(access.response.status === 401 ? '/login?callbackUrl=/admin/customers' : '/');
-  const customers = await loadAdminCustomers();
-  return <AdminCustomersView initialCustomers={customers} />;
+  const session = await getServerSession(authOptions);
+  if (!session?.user || session.user.role !== 'ADMIN') {
+    redirect('/');
+  }
+
+  const customers = await AdminService.getAdminCustomers();
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-8">
+      <AdminCustomersView initialCustomers={customers} />
+    </div>
+  );
 }

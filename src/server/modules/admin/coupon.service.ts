@@ -1,0 +1,71 @@
+import { prisma } from '@server/database/prisma';
+
+export interface CouponValidationResult {
+  valid: boolean;
+  error?: string;
+  coupon?: {
+    id: string;
+    code: string;
+    discountType: string;
+    discountValue: number;
+    fixedDiscountAmount?: bigint | null;
+    percentageRate?: number | null;
+    maxDiscount: number | bigint | null;
+    minOrderAmount: number | bigint;
+    perUserLimit: number;
+  };
+}
+
+/**
+ * Thẩm định tính hợp lệ và điều kiện áp dụng mã giảm giá (Voucher Validation Engine)
+ */
+export async function validateCoupon(
+  code: string,
+  userId: string | null,
+  subtotal: number | bigint
+): Promise<CouponValidationResult> {
+  const coupon = await prisma.coupon.findUnique({
+    where: { code: code.trim().toUpperCase() },
+  });
+
+  if (!coupon || !coupon.isActive) {
+    return { valid: false, error: 'Mã giảm giá không tồn tại hoặc đã vô hiệu' };
+  }
+
+  const now = new Date();
+  if (now < coupon.startDate || now > coupon.endDate) {
+    return { valid: false, error: 'Mã giảm giá chưa hoặc đã hết hạn sử dụng' };
+  }
+
+  if (coupon.usedCount >= coupon.usageLimit) {
+    return { valid: false, error: 'Mã giảm giá đã hết lượt sử dụng' };
+  }
+
+  if (BigInt(subtotal) < coupon.minOrderAmount) {
+    return { valid: false, error: `Đơn hàng tối thiểu để áp dụng mã này là ${Number(coupon.minOrderAmount).toLocaleString('vi-VN')}đ` };
+  }
+
+  if (userId) {
+    const usageCount = await prisma.order.count({
+      where: { couponId: coupon.id, userId, couponUsageClaimedAt: { not: null } },
+    });
+    if (usageCount >= coupon.perUserLimit) {
+      return { valid: false, error: 'Bạn đã sử dụng hết lượt mã giảm giá này' };
+    }
+  }
+
+  return {
+    valid: true,
+    coupon: {
+      id: coupon.id,
+      code: coupon.code,
+      discountType: coupon.discountType,
+      discountValue: coupon.discountValue,
+      fixedDiscountAmount: coupon.fixedDiscountAmount,
+      percentageRate: coupon.percentageRate,
+      maxDiscount: coupon.maxDiscount,
+      minOrderAmount: coupon.minOrderAmount,
+      perUserLimit: coupon.perUserLimit,
+    },
+  };
+}

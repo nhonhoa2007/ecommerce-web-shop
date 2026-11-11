@@ -1,1 +1,1 @@
-export { POST } from '@server/modules/orders/orders.controller';
+export { POST } from '@/server/modules/orders/orders.controller';

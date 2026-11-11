@@ -1,106 +1,65 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@server/database/prisma';
-import { requireAdmin } from './guards';
-import { updateUserRbac, validateUserUpdatePayload } from './admin-rbac.service';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@server/modules/auth/auth-options';
+import { AdminService } from './admin.service.ts';
 
 export const dynamic = 'force-dynamic';
 
-type CustomerFilters = { search?: string; role?: string; status?: string };
-
-export async function loadAdminCustomers({ search, role, status }: CustomerFilters = {}) {
-  const users = await prisma.user.findMany({
-    where: {
-      ...(role && role !== 'ALL' ? { role: role as 'CUSTOMER' | 'STAFF' | 'ADMIN' } : {}),
-      ...(status === 'ACTIVE' ? { isBlocked: false } : status === 'BLOCKED' ? { isBlocked: true } : {}),
-      ...(search ? { OR: [
-        { name: { contains: search, mode: 'insensitive' as const } },
-        { email: { contains: search, mode: 'insensitive' as const } },
-        { phone: { contains: search, mode: 'insensitive' as const } },
-        { address: { contains: search, mode: 'insensitive' as const } },
-      ] } : {}),
-    },
-    select: {
-      id: true, name: true, email: true, phone: true, address: true, avatar: true,
-      role: true, isVerified: true, isBlocked: true, createdAt: true,
-      staffPermissions: { select: { permission: true } },
-      orders: {
-        select: { id: true, orderCode: true, totalAmount: true, status: true, paymentStatus: true, createdAt: true },
-        orderBy: { createdAt: 'desc' },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  return users.map((user) => {
-    const paidOrders = user.orders.filter((order) => order.paymentStatus === 'PAID');
-    return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      address: user.address,
-      avatar: user.avatar,
-      role: user.role,
-      permissions: user.staffPermissions.map((entry) => entry.permission),
-      isVerified: user.isVerified,
-      isBlocked: user.isBlocked,
-      createdAt: user.createdAt.toISOString(),
-      orderCount: user.orders.length,
-      paidOrderCount: paidOrders.length,
-      totalSpent: paidOrders.reduce((sum, order) => sum + Number(order.totalAmount), 0),
-      recentOrders: user.orders.slice(0, 3).map((order) => ({
-        ...order,
-        totalAmount: Number(order.totalAmount),
-        createdAt: order.createdAt.toISOString(),
-      })),
-    };
-  });
-}
-
-export async function GET(request: Request) {
-  const access = await requireAdmin();
-  if (!access.authorized) return access.response;
-
-  const params = new URL(request.url).searchParams;
-  const role = params.get('role') || undefined;
-  const status = params.get('status') || undefined;
-  if ((role && !['ALL', 'CUSTOMER', 'STAFF', 'ADMIN'].includes(role)) ||
-      (status && !['ALL', 'ACTIVE', 'BLOCKED'].includes(status))) {
-    return NextResponse.json({ error: 'Bộ lọc không hợp lệ' }, { status: 400 });
-  }
+export async function GET(req: Request) {
   try {
-    const customers = await loadAdminCustomers({ search: params.get('search')?.trim(), role, status });
+    const session = await getServerSession(authOptions);
+    if (!session?.user || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get('search')?.trim() || undefined;
+    const role = searchParams.get('role')?.trim() || undefined;
+    const status = searchParams.get('status')?.trim() || undefined;
+
+    const customers = await AdminService.getAdminCustomers({
+      search,
+      role,
+      status,
+    });
+
     return NextResponse.json({ customers, users: customers });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Fetch customers error:', error);
     return NextResponse.json({ error: 'Lỗi tải danh sách người dùng' }, { status: 500 });
   }
 }
 
-export async function PATCH(request: Request) {
-  const access = await requireAdmin();
-  if (!access.authorized) return access.response;
+export async function PATCH(req: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 });
+    }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Dữ liệu không hợp lệ' }, { status: 400 });
-  }
-  const validation = validateUserUpdatePayload(body);
-  if (!validation.valid || !validation.data) {
-    return NextResponse.json({ error: validation.error }, { status: 400 });
-  }
-  try {
-    const result = await updateUserRbac(
-      { adminId: access.user.id, ...validation.data },
-      prisma.user as unknown as Parameters<typeof updateUserRbac>[1],
-    );
+    const body = await req.json();
+    const userId = body.userId || body.id;
+    const { role, isBlocked, isVerified, permissions } = body;
+
+    if (!userId || typeof userId !== 'string') {
+      return NextResponse.json({ error: 'Thiếu mã người dùng (userId)' }, { status: 400 });
+    }
+
+    const result = await AdminService.updateUser({
+      adminId: session.user.id,
+      userId,
+      role,
+      permissions,
+      isBlocked,
+      isVerified,
+    });
+
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: result.statusCode || 400 });
     }
-    return NextResponse.json({ success: true });
-  } catch (error) {
+
+    return NextResponse.json({ success: true, user: result.user });
+  } catch (error: unknown) {
     console.error('Update customer error:', error);
     return NextResponse.json({ error: 'Lỗi cập nhật người dùng' }, { status: 500 });
   }

@@ -19,7 +19,7 @@ import {
   upsertElectronicsProduct,
   type UpsertElectronicsProductInput,
 } from './product.service.ts';
-import { requireOperatorPermission, resolveOperatorAccess, type GuardUser } from '@server/modules/admin/guards';
+import { resolveOperatorAccess, type GuardUser } from '@server/modules/admin/guards';
 import {
   serializeProductDto,
   serializeProductMutationResult,
@@ -57,10 +57,6 @@ export async function GET(req: Request) {
     const category = searchParams.get('category');
     const search = searchParams.get('search');
     const all = searchParams.get('all') === 'true';
-    if (all) {
-      const access = await requireOperatorPermission('products');
-      if (!access.authorized) return access.response;
-    }
     // Phân trang + sắp xếp (mặc định: trang 1, không giới hạn — giữ tương thích ngược)
     const page = Math.max(normalizeNonNegativeInt(searchParams.get('page')) ?? 1, 1);
     const rawLimit = normalizeNonNegativeInt(searchParams.get('limit'));
@@ -81,7 +77,7 @@ export async function GET(req: Request) {
         },
       });
 
-      if (!product || (!all && !product.isActive)) {
+      if (!product) {
         return NextResponse.json({ error: 'Không tìm thấy sản phẩm' }, { status: 404 });
       }
 
@@ -337,6 +333,7 @@ export async function PUT(req: Request) {
     const product = await prisma.$transaction(async (tx) => {
       return await updateProductWithVariants(tx, {
         id,
+        actorRole: session.user.role,
         name: name ?? undefined,
         description: body.description !== undefined ? normalizeText(body.description) : undefined,
         price,

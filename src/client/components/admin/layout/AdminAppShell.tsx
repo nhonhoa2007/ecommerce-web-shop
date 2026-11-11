@@ -1,34 +1,105 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { getVisibleAdminSections } from '@shared/admin-page-access';
+import React, { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import { AnimateUIProvider } from '@animate-ui/react/provider';
+import { Dialog } from '@animate-ui/react/primitives/radix-ui/dialog';
+import * as SidebarPrimitive from '@animate-ui/react/primitives/sidebar';
+import { AdminSidebar } from './AdminSidebar';
+import { AdminTopbar } from './AdminTopbar';
 
-interface AdminUser {
-  name?: string | null;
-  email?: string | null;
-  role?: string;
-  permissions?: string[];
+export interface AdminAppShellProps {
+  children: React.ReactNode;
+  initialCollapsed?: boolean;
+  user?: {
+    name?: string | null;
+    email?: string | null;
+    role?: string;
+    permissions?: string[];
+  };
 }
 
-export function AdminAppShell({ user, children }: { user: AdminUser; children: React.ReactNode }) {
-  const pathname = usePathname();
-  return <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-[1440px] flex-col bg-[#f5f6f7] lg:flex-row">
-    <aside className="border-b border-slate-200 bg-white p-5 lg:w-64 lg:shrink-0 lg:border-b-0 lg:border-r">
-      <Link href="/admin" className="text-xl font-semibold">shop. <span className="text-sm font-normal text-slate-500">Admin</span></Link>
-      <nav aria-label="Điều hướng quản trị" className="mt-6 flex gap-2 lg:flex-col">
-        {getVisibleAdminSections(user).map((item) => {
-          const active = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(`${item.href}/`));
-          return <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined}
-            className={`rounded-xl px-4 py-3 text-sm font-medium ${active ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'}`}>{item.name}</Link>;
-        })}
-      </nav>
-      <div className="mt-8 border-t pt-4 text-xs text-slate-500">
-        <p className="font-semibold text-slate-800">{user.name || user.email || 'Người dùng'}</p>
-        <p>{user.role === 'ADMIN' ? 'Quản trị viên' : 'Nhân viên'}</p>
-        <Link href="/" className="mt-4 inline-block underline">Về cửa hàng</Link>
-      </div>
-    </aside>
-    <div className="min-w-0 flex-1">{children}</div>
-  </div>;
+let sidebarListeners: Array<() => void> = [];
+
+function emitSidebarChange() {
+  for (const listener of sidebarListeners) {
+    listener();
+  }
+}
+
+function subscribeSidebar(callback: () => void) {
+  sidebarListeners.push(callback);
+  window.addEventListener('storage', callback);
+  return () => {
+    sidebarListeners = sidebarListeners.filter((l) => l !== callback);
+    window.removeEventListener('storage', callback);
+  };
+}
+
+function getSidebarSnapshot(fallback: boolean) {
+  try {
+    const stored = localStorage.getItem('admin_sidebar_collapsed');
+    return stored === null ? fallback : stored === 'true';
+  } catch {
+    return fallback;
+  }
+}
+
+export function AdminAppShell({ children, user, initialCollapsed = false }: AdminAppShellProps) {
+  const isCollapsed = useSyncExternalStore(
+    subscribeSidebar,
+    () => getSidebarSnapshot(initialCollapsed),
+    () => initialCollapsed
+  );
+
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  useLayoutEffect(() => {
+    if (isCollapsed === getSidebarSnapshot(initialCollapsed)) {
+      document.documentElement.dataset.adminSidebarCollapsed = String(isCollapsed);
+    }
+  }, [initialCollapsed, isCollapsed]);
+
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const closeOnDesktop = () => { if (desktop.matches) setIsMobileOpen(false); };
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => desktop.removeEventListener('change', closeOnDesktop);
+  }, []);
+
+  const setSidebarOpen = (open: boolean) => {
+    if (window.matchMedia('(max-width: 1023px)').matches) return;
+    try {
+      localStorage.setItem('admin_sidebar_collapsed', String(!open));
+      document.cookie = `admin_sidebar_collapsed=${!open}; path=/admin; max-age=604800; SameSite=Lax`;
+      document.documentElement.dataset.adminSidebarCollapsed = String(!open);
+      emitSidebarChange();
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleToggleCollapse = () => setSidebarOpen(isCollapsed);
+
+  return (
+    <AnimateUIProvider tempo={0.85} reducedMotion="user">
+      <SidebarPrimitive.Provider
+        open={!isCollapsed}
+        onOpenChange={setSidebarOpen}
+        className="flex h-screen w-full overflow-hidden bg-[#f5f6f7] font-sans text-slate-900 antialiased"
+      >
+        <Dialog.Root open={isMobileOpen} onOpenChange={setIsMobileOpen}>
+          <AdminSidebar
+            isCollapsed={isCollapsed}
+            onToggleCollapse={handleToggleCollapse}
+            onCloseMobile={() => setIsMobileOpen(false)}
+            user={user}
+          />
+          <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
+            <AdminTopbar user={user} />
+            <main className="flex-1 overflow-y-auto">{children}</main>
+          </div>
+        </Dialog.Root>
+      </SidebarPrimitive.Provider>
+    </AnimateUIProvider>
+  );
 }

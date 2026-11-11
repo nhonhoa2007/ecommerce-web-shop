@@ -1,47 +1,155 @@
-import { randomBytes } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import { NextResponse } from 'next/server';
-import { requireOperatorPermission } from '@server/modules/admin/guards';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@server/modules/auth/auth-options';
+import { resolveOperatorAccess } from '@server/modules/admin/guards';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { validateImageFile,
+  verifyImageMagicBytes,
+  getCloudinaryConfig,
+  generateCloudinarySignature,
+  generateSafeUploadFilename,
+  getR2Config,
+  uploadToR2, } from '@server/modules/upload/upload.service';
 
 export const runtime = 'nodejs';
 
-const EXTENSIONS: Record<string, string> = {
-  'image/jpeg': '.jpg',
-  'image/png': '.png',
-  'image/webp': '.webp',
-  'image/gif': '.gif',
-};
-
-function matchesImageSignature(bytes: Buffer, mime: string) {
-  if (mime === 'image/jpeg') return bytes.length >= 3 && bytes.subarray(0, 3).toString('hex') === 'ffd8ff';
-  if (mime === 'image/png') return bytes.length >= 8 && bytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a';
-  if (mime === 'image/gif') return bytes.length >= 6 && ['GIF87a', 'GIF89a'].includes(bytes.subarray(0, 6).toString());
-  if (mime === 'image/webp') return bytes.length >= 12 && bytes.subarray(0, 4).toString() === 'RIFF' && bytes.subarray(8, 12).toString() === 'WEBP';
-  return false;
-}
-
-export async function POST(request: Request) {
-  const access = await requireOperatorPermission('products');
-  if (!access.authorized) return access.response;
-
-  let form: FormData;
+export async function POST(req: Request) {
   try {
-    form = await request.formData();
-  } catch {
-    return NextResponse.json({ error: 'Dữ liệu tải lên không hợp lệ' }, { status: 400 });
+    // 1. Check Authentication & Authorization
+    const session = await getServerSession(authOptions);
+    if (!session?.user || !resolveOperatorAccess(session.user, 'products')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // 2. Parse FormData
+    let formData: FormData;
+    try {
+      formData = await req.formData();
+    } catch {
+      return NextResponse.json({ error: 'Dữ liệu tải lên không hợp lệ' }, { status: 400 });
+    }
+
+    const file = (formData.get('file') || formData.get('image')) as File | null;
+    if (!file || typeof file === 'string' || !('size' in file)) {
+      return NextResponse.json({ error: 'Vui lòng chọn file ảnh để tải lên' }, { status: 400 });
+    }
+
+    // 3. Validate file size and MIME type
+    const validation = validateImageFile({
+      size: file.size,
+      type: file.type,
+    });
+
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    // 3b. Verify binary magic bytes to prevent disguised malicious files
+    const arrayBuffer = await file.arrayBuffer();
+    const fileBuffer = Buffer.from(arrayBuffer);
+    if (!verifyImageMagicBytes(fileBuffer)) {
+      return NextResponse.json(
+        { error: 'Nội dung file không phải là ảnh hợp lệ (JPG, PNG, WEBP, GIF)' },
+        { status: 400 }
+      );
+    }
+
+    // 4. Check Cloudflare R2 Configuration (Priority 1)
+    const r2Config = getR2Config();
+    const filename = generateSafeUploadFilename(file.name || 'image', file.type);
+
+    if (r2Config) {
+      try {
+        const imageUrl = await uploadToR2(
+          {
+            fileBuffer,
+            filename,
+            contentType: file.type,
+            folder: 'products',
+          },
+          r2Config
+        );
+
+        return NextResponse.json({
+          url: imageUrl,
+          success: true,
+        });
+      } catch (r2Error) {
+        console.error('Cloudflare R2 upload error response:', r2Error);
+        if (!getCloudinaryConfig()) {
+          return NextResponse.json(
+            { error: 'Tải ảnh lên Cloudflare R2 thất bại' },
+            { status: 502 }
+          );
+        }
+      }
+    }
+
+    // 5. Check Cloudinary Configuration (Fallback 1)
+    const cloudinaryConfig = getCloudinaryConfig();
+
+    if (cloudinaryConfig) {
+      // Cloudinary upload mode
+      const timestamp = Math.floor(Date.now() / 1000);
+      const folder = 'products';
+
+      const signature = generateCloudinarySignature(
+        { folder, timestamp },
+        cloudinaryConfig.apiSecret
+      );
+
+      const cloudinaryFormData = new FormData();
+      cloudinaryFormData.append('file', file);
+      cloudinaryFormData.append('api_key', cloudinaryConfig.apiKey);
+      cloudinaryFormData.append('timestamp', timestamp.toString());
+      cloudinaryFormData.append('folder', folder);
+      cloudinaryFormData.append('signature', signature);
+
+      const cloudinaryRes = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/image/upload`,
+        {
+          method: 'POST',
+          body: cloudinaryFormData,
+        }
+      );
+
+      const cloudinaryData = (await cloudinaryRes.json()) as {
+        secure_url?: string;
+        url?: string;
+        error?: { message?: string };
+      };
+
+      if (!cloudinaryRes.ok || (!cloudinaryData.secure_url && !cloudinaryData.url)) {
+        console.error('Cloudinary upload error response:', cloudinaryData);
+        return NextResponse.json(
+          { error: cloudinaryData.error?.message || 'Tải ảnh lên Cloudinary thất bại' },
+          { status: 502 }
+        );
+      }
+
+      const imageUrl = cloudinaryData.secure_url || cloudinaryData.url;
+      return NextResponse.json({
+        url: imageUrl,
+        success: true,
+      });
+    }
+
+    // 6. Local Storage Fallback (/public/uploads)
+    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+    await fs.mkdir(uploadsDir, { recursive: true });
+
+    const destinationPath = path.join(uploadsDir, filename);
+
+    await fs.writeFile(destinationPath, fileBuffer);
+
+    return NextResponse.json({
+      url: `/uploads/${filename}`,
+      success: true,
+    });
+  } catch (error: unknown) {
+    console.error('Admin upload handler error:', error);
+    const message = error instanceof Error ? error.message : 'Lỗi trong quá trình tải ảnh lên';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-  const file = form.get('file');
-  if (!(file instanceof File) || !EXTENSIONS[file.type] || file.size === 0 || file.size > 5 * 1024 * 1024) {
-    return NextResponse.json({ error: 'Ảnh phải là JPG, PNG, WEBP hoặc GIF và không quá 5MB' }, { status: 400 });
-  }
-  const bytes = Buffer.from(await file.arrayBuffer());
-  if (!matchesImageSignature(bytes, file.type)) {
-    return NextResponse.json({ error: 'Nội dung file không phải ảnh hợp lệ' }, { status: 400 });
-  }
-  const filename = `${Date.now()}-${randomBytes(8).toString('hex')}${EXTENSIONS[file.type]}`;
-  const directory = path.join(process.cwd(), 'public', 'uploads');
-  await mkdir(directory, { recursive: true });
-  await writeFile(path.join(directory, filename), bytes, { flag: 'wx' });
-  return NextResponse.json({ url: `/uploads/${filename}` });
 }

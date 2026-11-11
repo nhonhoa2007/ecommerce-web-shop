@@ -1,84 +1,100 @@
-'use client';
-
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { CartItem } from '@shared/types';
-import { normalizeCartQuantity } from '@shared/utils/cart';
-
-export type CartLine = Omit<CartItem, 'price'> & { price: number; stock: number };
-type NewCartLine = Omit<CartLine, 'quantity'>;
 
 interface CartStore {
-  items: CartLine[];
-  addItem: (item: NewCartLine, quantity?: number) => void;
+  items: CartItem[];
+  addItem: (item: Omit<CartItem, 'quantity'>, quantity?: number) => void;
   removeItem: (productId: string, variantId?: string | null) => void;
-  updateItemQuantity: (productId: string, quantity: number, variantId?: string | null) => void;
+  updateQuantity: (productId: string, quantity: number, variantId?: string | null) => void;
   clearCart: () => void;
   getTotalAmount: () => number;
   getTotalItems: () => number;
 }
 
-const memoryStorage = {
+const dummyStorage = {
   getItem: () => null,
-  setItem: () => undefined,
-  removeItem: () => undefined,
+  setItem: () => {},
+  removeItem: () => {},
 };
-
-function lineMatches(line: CartLine, productId: string, variantId?: string | null) {
-  return line.productId === productId && (line.variantId ?? null) === (variantId ?? null);
-}
 
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
       items: [],
-      addItem: (item, quantity = 1) =>
+      addItem: (item, addQty = 1) =>
         set((state) => {
-          const addQuantity = normalizeCartQuantity(quantity, item.stock);
-          if (addQuantity === 0) return state;
-          const existing = state.items.find((line) =>
-            lineMatches(line, item.productId, item.variantId),
+          const qty = Math.max(1, addQty);
+          const targetVariantId = item.variantId || null;
+          const existingIndex = state.items.findIndex(
+            (i) => i.productId === item.productId && (i.variantId || null) === targetVariantId
           );
-          if (!existing) {
-            return { items: [...state.items, { ...item, quantity: addQuantity }] };
+          if (existingIndex > -1) {
+            const updated = [...state.items];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              ...item,
+              variantId: targetVariantId,
+              variantTitle: item.variantTitle || updated[existingIndex].variantTitle || null,
+              quantity: updated[existingIndex].quantity + qty,
+            };
+            return { items: updated };
           }
           return {
-            items: state.items.map((line) =>
-              lineMatches(line, item.productId, item.variantId)
-                ? {
-                    ...line,
-                    stock: item.stock,
-                    quantity: normalizeCartQuantity(line.quantity + addQuantity, item.stock),
-                  }
-                : line,
-            ),
+            items: [
+              ...state.items,
+              {
+                ...item,
+                variantId: targetVariantId,
+                variantTitle: item.variantTitle || null,
+                quantity: qty,
+              },
+            ],
           };
         }),
       removeItem: (productId, variantId) =>
         set((state) => ({
-          items: state.items.filter((line) => !lineMatches(line, productId, variantId)),
+          items: state.items.filter((i) => {
+            if (i.productId !== productId) return true;
+            if (variantId !== undefined) {
+              return (i.variantId || null) !== (variantId || null);
+            }
+            return false;
+          }),
         })),
-      updateItemQuantity: (productId, quantity, variantId) =>
-        set((state) => ({
-          items:
-            quantity <= 0
-              ? state.items.filter((line) => !lineMatches(line, productId, variantId))
-              : state.items.map((line) =>
-                  lineMatches(line, productId, variantId)
-                    ? { ...line, quantity: normalizeCartQuantity(quantity, line.stock) }
-                    : line,
-                ),
-        })),
+      updateQuantity: (productId, quantity, variantId) =>
+        set((state) => {
+          if (quantity <= 0) {
+            return {
+              items: state.items.filter((i) => {
+                if (i.productId !== productId) return true;
+                if (variantId !== undefined) {
+                  return (i.variantId || null) !== (variantId || null);
+                }
+                return false;
+              }),
+            };
+          }
+          return {
+            items: state.items.map((i) => {
+              const matches =
+                i.productId === productId &&
+                (variantId === undefined || (i.variantId || null) === (variantId || null));
+              return matches ? { ...i, quantity } : i;
+            }),
+          };
+        }),
       clearCart: () => set({ items: [] }),
-      getTotalAmount: () =>
-        get().items.reduce((total, item) => total + item.price * item.quantity, 0),
-      getTotalItems: () => get().items.reduce((total, item) => total + item.quantity, 0),
+      getTotalAmount: () => get().items.reduce((sum, i) => sum + Number(i.price) * i.quantity, 0),
+      getTotalItems: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
     }),
     {
       name: 'cart-storage',
       storage: createJSONStorage(() =>
-        typeof window === 'undefined' ? memoryStorage : window.localStorage,
+        typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+          ? window.localStorage
+          : dummyStorage
       ),
-    },
-  ),
+    }
+  )
 );

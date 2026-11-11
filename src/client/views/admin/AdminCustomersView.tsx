@@ -709,7 +709,7 @@ export function AdminCustomersView({ initialCustomers }: { initialCustomers: Cus
                         Phân bổ quyền hạn nhân viên (Permission Matrix)
                       </label>
                       <span className="text-[10px] text-gray-500 font-medium">
-                        {(selectedCustomer.permissions || []).length}/{STAFF_PERMISSIONS.length} quyền
+                        {(selectedCustomer.permissions || []).length}/5 quyền
                       </span>
                     </div>
 

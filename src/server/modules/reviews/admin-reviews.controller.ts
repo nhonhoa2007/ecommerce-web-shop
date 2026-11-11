@@ -1,76 +1,93 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@server/modules/auth/auth-options';
 import { prisma } from '@server/database/prisma';
-import { requireAdmin, requireOperatorPermission } from '@server/modules/admin/guards';
-import { validateReviewModeration } from './review-moderation';
+import { validateReviewModeration } from './review.service.ts';
+import { resolveOperatorAccess } from '@server/modules/admin/guards';
 
 export const dynamic = 'force-dynamic';
 
-export async function loadAdminReviews(filters: { search?: string; rating?: number; approved?: boolean } = {}) {
-  const reviews = await prisma.review.findMany({
-    where: {
-      ...(filters.rating ? { rating: filters.rating } : {}),
-      ...(filters.approved !== undefined ? { isApproved: filters.approved } : {}),
-      ...(filters.search ? { OR: [
-        { comment: { contains: filters.search, mode: 'insensitive' as const } },
-        { reply: { contains: filters.search, mode: 'insensitive' as const } },
-        { product: { name: { contains: filters.search, mode: 'insensitive' as const } } },
-        { user: { name: { contains: filters.search, mode: 'insensitive' as const } } },
-        { user: { email: { contains: filters.search, mode: 'insensitive' as const } } },
-      ] } : {}),
-    },
-    include: {
-      product: { select: { id: true, name: true, image: true, price: true } },
-      user: { select: { id: true, name: true, email: true, avatar: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-  return reviews.map((review) => ({
-    ...review,
-    createdAt: review.createdAt.toISOString(),
-    product: { ...review.product, price: Number(review.product.price) },
-  }));
-}
-
-export async function GET(request: Request) {
-  const access = await requireOperatorPermission('reviews');
-  if (!access.authorized) return access.response;
-  const params = new URL(request.url).searchParams;
-  const ratingParam = params.get('rating');
-  const approvedParam = params.get('approved');
-  if ((ratingParam && !['1', '2', '3', '4', '5'].includes(ratingParam)) ||
-      (approvedParam && !['true', 'false'].includes(approvedParam))) {
-    return NextResponse.json({ error: 'Bộ lọc không hợp lệ' }, { status: 400 });
-  }
+export async function GET(req: Request) {
   try {
-    const reviews = await loadAdminReviews({
-      search: params.get('search')?.trim(),
-      rating: ratingParam ? Number(ratingParam) : undefined,
-      approved: approvedParam ? approvedParam === 'true' : undefined,
+    const session = await getServerSession(authOptions);
+    if (!session?.user || !resolveOperatorAccess(session.user, 'reviews')) {
+      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get('search')?.trim();
+    const approvedParam = searchParams.get('approved');
+    const ratingParam = searchParams.get('rating');
+
+    const reviews = await prisma.review.findMany({
+      where: {
+        ...(approvedParam === 'true' ? { isApproved: true } : {}),
+        ...(approvedParam === 'false' ? { isApproved: false } : {}),
+        ...(ratingParam && !isNaN(Number(ratingParam)) ? { rating: Number(ratingParam) } : {}),
+        ...(search
+          ? {
+              OR: [
+                { comment: { contains: search, mode: 'insensitive' } },
+                { reply: { contains: search, mode: 'insensitive' } },
+                { product: { name: { contains: search, mode: 'insensitive' } } },
+                { user: { name: { contains: search, mode: 'insensitive' } } },
+                { user: { email: { contains: search, mode: 'insensitive' } } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+            price: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
     });
+
     return NextResponse.json({ reviews });
-  } catch (error) {
-    console.error('Fetch reviews error:', error);
+  } catch (error: unknown) {
+    console.error('Fetch admin reviews error:', error);
     return NextResponse.json({ error: 'Lỗi tải danh sách đánh giá' }, { status: 500 });
   }
 }
 
-export async function PATCH(request: Request) {
-  const access = await requireOperatorPermission('reviews');
-  if (!access.authorized) return access.response;
-  let body: unknown;
-  try { body = await request.json(); } catch {
-    return NextResponse.json({ error: 'Dữ liệu không hợp lệ' }, { status: 400 });
-  }
-  const validation = validateReviewModeration(body);
-  if (!validation.valid) return NextResponse.json({ error: validation.error }, { status: 400 });
-  const { id, isApproved, reply } = validation.data;
+export async function PATCH(req: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user || !resolveOperatorAccess(session.user, 'reviews')) {
+      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const validation = validateReviewModeration(body);
+    if (!validation.valid || !validation.data) {
+      return NextResponse.json({ error: validation.error || 'Dữ liệu không hợp lệ' }, { status: 400 });
+    }
+
+    const { id, isApproved, reply } = validation.data;
+
     const existing = await prisma.review.findUnique({ where: { id } });
-    if (!existing) return NextResponse.json({ error: 'Không tìm thấy đánh giá' }, { status: 404 });
-    const review = await prisma.review.update({
+    if (!existing) {
+      return NextResponse.json({ error: 'Không tìm thấy đánh giá' }, { status: 404 });
+    }
+
+    const updated = await prisma.review.update({
       where: { id },
       data: {
-        ...(isApproved !== undefined ? { isApproved } : {}),
+        ...(typeof isApproved === 'boolean' ? { isApproved } : {}),
         ...(reply !== undefined ? { reply } : {}),
       },
       include: {
@@ -78,24 +95,33 @@ export async function PATCH(request: Request) {
         user: { select: { id: true, name: true, email: true, avatar: true } },
       },
     });
-    return NextResponse.json({ success: true, review: { ...review, product: { ...review.product, price: Number(review.product.price) } } });
-  } catch (error) {
+
+    return NextResponse.json({ success: true, review: updated });
+  } catch (error: unknown) {
     console.error('Update review error:', error);
     return NextResponse.json({ error: 'Lỗi cập nhật đánh giá' }, { status: 500 });
   }
 }
 
-export async function DELETE(request: Request) {
-  const access = await requireAdmin();
-  if (!access.authorized) return access.response;
-  const id = new URL(request.url).searchParams.get('id');
-  if (!id) return NextResponse.json({ error: 'Thiếu ID đánh giá' }, { status: 400 });
+export async function DELETE(req: Request) {
   try {
-    const existing = await prisma.review.findUnique({ where: { id }, select: { id: true } });
-    if (!existing) return NextResponse.json({ error: 'Không tìm thấy đánh giá' }, { status: 404 });
-    await prisma.review.delete({ where: { id } });
+    const session = await getServerSession(authOptions);
+    if (!session?.user || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    if (!id) {
+      return NextResponse.json({ error: 'Thiếu ID đánh giá' }, { status: 400 });
+    }
+
+    await prisma.review.delete({
+      where: { id },
+    });
+
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Delete review error:', error);
     return NextResponse.json({ error: 'Lỗi xóa đánh giá' }, { status: 500 });
   }

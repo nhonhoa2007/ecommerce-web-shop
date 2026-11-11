@@ -16,7 +16,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing roomId' }, { status: 400 });
     }
 
-    const room = await prisma.chatRoom.findUnique({
+    const room = await (prisma as any).chatRoom.findUnique({
       where: { id: roomId },
     });
     if (!room) {
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     });
 
     // Update customerReadAt or staffReadAt directly on ChatRoom
-    const updateData: { customerReadAt?: Date; staffReadAt?: Date; assignedStaffId?: string } = {};
+    const updateData: any = {};
     if (isCustomer) {
       updateData.customerReadAt = new Date();
     } else {
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
       }
     }
 
-    await prisma.chatRoom.update({
+    await (prisma as any).chatRoom.update({
       where: { id: roomId },
       data: updateData,
     });

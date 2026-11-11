@@ -3,19 +3,35 @@ import './globals.css';
 import { Providers } from './providers';
 import { Header } from '@client/components/layout/Header';
 import { Footer } from '@client/components/layout/Footer';
+import { DraggablePetWidget } from '@client/components/assistant/DraggablePetWidget';
 
 export const metadata: Metadata = {
-  title: 'shop. · Hệ thống Website Thương mại điện tử',
-  description: 'Khám phá, tìm kiếm và lọc sản phẩm trên website thương mại điện tử.',
+  title: 'shop. — Khám phá mua sắm & Thanh toán QR',
+  description: 'Cửa hàng trực tuyến phong cách hiện đại - Tự động tạo mã VietQR thanh toán tức thì',
 };
+
+const adminSidebarPreferenceScript = `try {
+  if (location.pathname.startsWith('/admin')) {
+    var saved = localStorage.getItem('admin_sidebar_collapsed');
+    var cookieCollapsed = document.cookie.split('; ').includes('admin_sidebar_collapsed=true');
+    document.documentElement.dataset.adminSidebarCollapsed = String(saved === null ? cookieCollapsed : saved === 'true');
+  }
+} catch (_) {}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="vi">
-      <body className="flex min-h-screen flex-col bg-canvas-mist text-ink-black antialiased">
+    <html lang="vi" suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: adminSidebarPreferenceScript }} /></head>
+      <body className="min-h-screen bg-canvas-mist text-ink-black flex flex-col antialiased">
+        <a href="#main-content" className="skip-link">
+          Bỏ qua tới nội dung chính
+        </a>
         <Providers>
           <Header />
-          <main id="main-content" className="flex-1">{children}</main>
+          <main id="main-content" className="flex-1">
+            {children}
+          </main>
+          <DraggablePetWidget />
           <Footer />
         </Providers>
       </body>

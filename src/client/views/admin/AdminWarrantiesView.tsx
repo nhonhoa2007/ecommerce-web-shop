@@ -4,16 +4,7 @@ import React from 'react';
 import { ShieldCheck } from 'lucide-react';
 
 export interface AdminWarrantiesViewProps {
-  initialClaims: Array<{
-    id: string;
-    claimNumber: string;
-    status: string;
-    resolutionOutcome?: string | null;
-    orderItem?: { productName?: string | null } | null;
-    order?: { orderCode?: string | null } | null;
-    issueDescription: string;
-    createdAt: string | Date;
-  }>;
+  initialClaims: any[];
 }
 
 export function AdminWarrantiesView({ initialClaims }: AdminWarrantiesViewProps) {

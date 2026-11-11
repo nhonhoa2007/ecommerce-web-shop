@@ -48,7 +48,6 @@ export interface CartItem {
   price: MoneyVnd | number | bigint;
   image?: string;
   quantity: number;
-  stock?: number;
   variantId?: string | null;
   variantTitle?: string | null;
   attachedToProductId?: string | null;
@@ -566,6 +565,7 @@ export interface WalletTopupResponse {
   topupCode: string;
   amount: MoneyVnd | number | bigint;
   qrUrl?: string;
+  expiresAt: string;
   bankInfo?: {
     bankName: string;
     bankId: string;
